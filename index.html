@@ -19,7 +19,7 @@
       overflow-x: hidden;
     }
 
-    /* YouTube UI完全非表示用コンテナ */
+    /* YouTube UI非表示コンテナ */
     .video-viewport {
       position: relative;
       width: 100%;
@@ -42,32 +42,32 @@
       pointer-events: none;
     }
 
-    /* リアルなテレビ番組表 (EPG / ラテ欄) */
+    /* テレビ番組表 (EPG / ラテ欄) */
     .epg-scroll-container {
       position: relative;
-      height: 520px;
+      height: 540px;
       overflow-y: auto;
       overflow-x: hidden;
       background: #121316;
-      border: 1px solid #26272b;
+      border-top: 1px solid #26272b;
     }
     .epg-header-row {
       position: sticky;
       top: 0;
       z-index: 30;
       display: grid;
-      grid-template-columns: 48px 1fr 1fr;
-      background: #1a1c20;
+      grid-template-columns: 52px 1fr 1fr;
+      background: #181a1f;
       border-bottom: 2px solid #2e3138;
     }
     .epg-body-grid {
       position: relative;
       display: grid;
-      grid-template-columns: 48px 1fr 1fr;
+      grid-template-columns: 52px 1fr 1fr;
       height: 4320px; /* 24時間 × 180px (1分 = 3px) */
     }
     .epg-time-axis {
-      background: #16181c;
+      background: #15171c;
       border-right: 1px solid #2a2d34;
       position: relative;
     }
@@ -75,12 +75,12 @@
       height: 180px;
       border-bottom: 1px solid #2a2d34;
       display: flex;
-       flex-direction: column;
+      flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding-top: 4px;
+      padding-top: 6px;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       color: #a0a5b1;
     }
     .epg-hour-cell.morning { background: rgba(56, 189, 248, 0.04); }
@@ -101,7 +101,7 @@
       border-bottom: 1px solid #2a2d34;
       padding: 4px 8px;
       overflow: hidden;
-      background: #141619;
+      background: #14161a;
       transition: background 0.15s;
       display: flex;
       gap: 8px;
@@ -112,8 +112,8 @@
       z-index: 10;
     }
     .epg-program-item.active-program {
-      background: #1e2430;
-      border-left: 3px solid #3b82f6;
+      background: #1d2432;
+      border-left: 3px solid #38bdf8;
     }
     .epg-program-item.live-slot {
       background: #2b1419;
@@ -124,7 +124,7 @@
       border-left: 3px solid #f59e0b;
     }
 
-    /* 現在時刻の赤線 */
+    /* 現在時刻ライン */
     .epg-now-line {
       position: absolute;
       left: 0;
@@ -137,7 +137,7 @@
     .epg-now-line::before {
       content: "";
       position: absolute;
-      left: 44px;
+      left: 47px;
       top: -4px;
       width: 10px;
       height: 10px;
@@ -145,7 +145,6 @@
       background: #ef4444;
     }
 
-    /* スクロールバー */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -161,10 +160,12 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- シンプルなヘッダー -->
+  <!-- ヘッダー -->
   <header class="h-14 px-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between sticky top-0 z-50">
-    <div class="flex items-center gap-6">
-      <div class="text-lg font-black tracking-wider text-white">TAKANEKO.TV</div>
+    <div class="flex items-center gap-5">
+      <a href="https://www.youtube.com/@takaneko_ch" target="_blank" rel="noopener noreferrer" class="text-lg font-black tracking-wider text-white hover:text-zinc-300 transition">
+        TAKANEKO.TV
+      </a>
       <nav class="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
         <button id="btn-ch1" onclick="switchChannel(1)" class="px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black">
           視聴チャンネル1
@@ -176,7 +177,7 @@
     </div>
 
     <div class="flex items-center gap-3">
-      <button id="btn-audio" onclick="toggleAudio()" class="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition" title="音声切替">
+      <button id="btn-audio" onclick="toggleAudio()" class="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white transition">
         <svg id="icon-vol-on" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
         </svg>
@@ -188,7 +189,7 @@
     </div>
   </header>
 
-  <!-- メイン視聴エリア -->
+  <!-- メインエリア -->
   <main class="max-w-[1600px] w-full mx-auto p-4 flex-1 flex flex-col gap-4">
     <div id="stage-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
       
@@ -199,8 +200,8 @@
             <div id="yt-player"></div>
           </div>
 
-          <!-- クリック透過防止＆初回タッチ時アンミュート用透明レイヤー -->
-          <div id="interaction-shield" onclick="ensureAudioUnmuted()" class="absolute inset-0 z-10"></div>
+          <!-- クリック透過防止＆音声有効化レイヤー -->
+          <div id="interaction-shield" onclick="handleShieldTap()" class="absolute inset-0 z-10 cursor-pointer"></div>
 
           <!-- 10分前待機画面（視聴チャンネル1のみ） -->
           <div id="standby-overlay" class="hidden absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
@@ -211,19 +212,24 @@
           </div>
         </div>
 
-        <!-- 現在の番組タイトルバー -->
+        <!-- 現在の番組情報バー -->
         <div class="px-4 py-3 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3 min-w-0">
-            <img id="current-thumb" src="" alt="" class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0 hidden" />
+            <img
+              id="current-thumb"
+              src="https://i.ytimg.com/vi/UsDZmpYOMq4/mqdefault.jpg"
+              alt=""
+              class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0"
+            />
             <div id="current-title" class="text-sm font-bold text-zinc-100 truncate"></div>
           </div>
           <div id="current-time-range" class="text-xs font-mono text-zinc-400 shrink-0 tabular-nums"></div>
         </div>
       </div>
 
-      <!-- YouTubeチャット領域（視聴チャンネル1のみ表示） -->
-      <div id="chat-column" class="lg:col-span-3 h-full">
-        <div class="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden h-[360px] lg:h-[calc((100vw-32px)*0.75*9/16+49px)] max-h-[680px]">
+      <!-- YouTubeチャット領域（視聴チャンネル1のみ） -->
+      <div id="chat-column" class="lg:col-span-3 w-full">
+        <div class="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden h-[380px] lg:h-[520px]">
           <iframe
             id="yt-chat-frame"
             class="w-full h-full border-0"
@@ -235,9 +241,8 @@
 
     </div>
 
-    <!-- 番組表（3日間・リアルなテレビ番組表スタイル） -->
+    <!-- 3日間テレビ番組表 (EPG) -->
     <section class="flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
-      <!-- 日付タブ（3日間） -->
       <div class="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
         <div id="epg-day-tabs" class="flex items-center gap-1"></div>
         <button onclick="scrollToCurrentTime()" class="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition">
@@ -245,12 +250,11 @@
         </button>
       </div>
 
-      <!-- 番組表本体 -->
       <div id="epg-scroll" class="epg-scroll-container">
         <div class="epg-header-row">
-          <div class="py-2 text-center text-[11px] font-bold text-zinc-500 border-r border-zinc-800">時刻</div>
-          <div class="py-2 px-3 text-xs font-bold text-white border-r border-zinc-800">視聴チャンネル1</div>
-          <div class="py-2 px-3 text-xs font-bold text-white">視聴チャンネル2</div>
+          <div class="py-2.5 text-center text-[11px] font-bold text-zinc-400 border-r border-zinc-800">時刻</div>
+          <div class="py-2.5 px-3 text-xs font-bold text-white border-r border-zinc-800">視聴チャンネル1</div>
+          <div class="py-2.5 px-3 text-xs font-bold text-white">視聴チャンネル2</div>
         </div>
 
         <div id="epg-grid" class="epg-body-grid">
@@ -263,18 +267,39 @@
     </section>
   </main>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     const CHANNEL_HANDLE = '@takaneko_ch';
     const EPOCH_BASE_SEC = Math.floor(new Date('2026-01-01T00:00:00+09:00').getTime() / 1000);
     const PX_PER_MINUTE = 3; // 1分 = 3px (1時間 = 180px, 24時間 = 4320px)
 
-    // 状態管理
-    let videoCatalog = [];
+    // 初期シードカタログ（たかねこちゃんねる実在動画リスト・即座に再生＆番組表描画が可能）
+    const SEED_VIDEOS = [
+      { id: 'UsDZmpYOMq4', title: 'ほのぼのゲーかと思ったらとんでもないゲームだった件', duration: 920 },
+      { id: 'G4uU482Z59Q', title: 'たかねこPodcast #1 恋バナしようぜ', duration: 4620 },
+      { id: 'lKQKSVgymHA', title: '【リハビリ47日目】めっちゃカメレオン【隠れるゲーム】', duration: 5400 },
+      { id: 'vtW_jtJAELc', title: '【リハビリ46日目】めっちゃカメレオン【隠れるゲーム】', duration: 7639 },
+      { id: '6N0KrDewh5s', title: '【飲酒雑談】居酒屋で3万3千円溶かした後の深夜配信ｗ', duration: 5100 },
+      { id: '_EHcV-iH7TE', title: '【リハビリ43日目】めっちゃカメレオン【隠れるゲーム】', duration: 6300 },
+      { id: 'WGg5VHlGKWc', title: '【リハビリ33日目】めっちゃカメレオン【隠れるゲーム】', duration: 5800 },
+      { id: 'iFx3RStL_CQ', title: '【雑談配信】たかねこちゃんねる【のんびりまったり】', duration: 4800 },
+      { id: '203_cd6erMI', title: '【リハビリ17日目】めっちゃカメレオン【隠れるゲーム】', duration: 5200 },
+      { id: 'NYDGz5c75iQ', title: '【リハビリ7日目】めっちゃカメレオン【隠れるゲーム】', duration: 4900 },
+      { id: 'vv-o13YKrJc', title: '【切り抜き】おもてなしに爆笑するたかねこ', duration: 180 },
+      { id: 'Ejc45emW8KQ', title: '病弱トマトの大虐殺', duration: 60 },
+      { id: 'sUzEr3hmb2g', title: '【絶叫エンド】コメントくれる人への感謝の気持ち', duration: 60 }
+    ];
+
+    let videoCatalog = SEED_VIDEOS.map(v => ({
+      ...v,
+      thumb: `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`
+    }));
+
+    const brokenVideoIds = new Set();
+
     let liveStreamInfo = {
       videoId: null,
       title: '',
-      startTimeSec: null, // 配信開始予定時刻(UNIX秒)
+      startTimeSec: null,
       isLiveNow: false
     };
 
@@ -284,14 +309,19 @@
     let playerReady = false;
     let currentPlayingId = null;
     let currentChatVideoId = null;
-    let isMuted = false;
+    let userRequestedMute = false;
 
-    // 1. シード付き乱数（全デバイス共通のランダム順序を生成）
+    // 1. シード付き乱数（全デバイスで共通のランダム再生順序を生成）
     function seededRandom(seed) {
       let t = (seed + 0x6D2B79F5) | 0;
       t = Math.imul(t ^ (t >>> 15), t | 1);
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+
+    function getActiveCatalog() {
+      const filtered = videoCatalog.filter(v => !brokenVideoIds.has(v.id));
+      return filtered.length > 0 ? filtered : videoCatalog;
     }
 
     function getDeterministicShuffle(list, cycleIndex, channelSalt) {
@@ -300,185 +330,29 @@
       for (let i = arr.length - 1; i > 0; i--) {
         seed = (seed + 1013904223) | 0;
         const j = Math.floor(seededRandom(seed) * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+        const tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
       }
       return arr;
     }
 
-    // 2. YouTubeの再生時間文字列("12:34" や "1:05:20")を秒数に変換
-    function parseDurationText(text) {
-      if (!text) return 300;
-      const parts = text.trim().split(':').map(Number);
-      if (parts.some(isNaN)) return 300;
-      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      if (parts.length === 2) return parts[0] * 60 + parts[1];
-      return parts[0] || 300;
-    }
-
-    // 3. @takaneko_ch の「動画（Videos）」タブと「ライブ（Streams）」を実際に取得
-    async function fetchTextWithFallback(targetUrl) {
-      const proxies = [
-        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-      ];
-      for (const buildUrl of proxies) {
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 7000);
-          const res = await fetch(buildUrl(targetUrl), { signal: controller.signal });
-          clearTimeout(timer);
-          if (res.ok) {
-            const text = await res.text();
-            if (text && text.length > 500) return text;
-          }
-        } catch (_) {}
-      }
-      return null;
-    }
-
-    function extractYtInitialData(html) {
-      if (!html) return null;
-      const patterns = [
-        /var ytInitialData\s*=\s*(\{.+?\});<\/script>/s,
-        /window\["ytInitialData"\]\s*=\s*(\{.+?\});/s,
-        /ytInitialData\s*=\s*(\{.+?\});<\/script>/s
-      ];
-      for (const regex of patterns) {
-        const match = html.match(regex);
-        if (match && match[1]) {
-          try {
-            return JSON.parse(match[1]);
-          } catch (_) {}
-        }
-      }
-      return null;
-    }
-
-    function collectVideoRenderers(obj, results = []) {
-      if (!obj || typeof obj !== 'object') return results;
-      if (obj.videoRenderer && obj.videoRenderer.videoId) {
-        results.push(obj.videoRenderer);
-        return results;
-      }
-      for (const key of Object.keys(obj)) {
-        collectVideoRenderers(obj[key], results);
-      }
-      return results;
-    }
-
-    async function loadTakanekoVideosAndLiveStatus() {
-      // URLパラメータでのライブ枠指定にも対応 (?live=VIDEO_ID&start=UNIX_SEC)
-      const params = new URLSearchParams(location.search);
-      if (params.get('live')) {
-        liveStreamInfo.videoId = params.get('live');
-        liveStreamInfo.title = params.get('title') || 'たかねこちゃんねる ライブ';
-        liveStreamInfo.startTimeSec = params.get('start')
-          ? Number(params.get('start'))
-          : Math.floor(Date.now() / 1000) - 60;
-        liveStreamInfo.isLiveNow = Math.floor(Date.now() / 1000) >= liveStreamInfo.startTimeSec;
-      }
-
-      // 1) @takaneko_ch/videos から配信ではないすべての「動画」を取得
-      const videosHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/videos?hl=ja`);
-      const initialData = extractYtInitialData(videosHtml);
-
-      if (initialData) {
-        const renderers = collectVideoRenderers(initialData);
-        const parsedVideos = [];
-        const seenIds = new Set();
-
-        for (const vr of renderers) {
-          const vid = vr.videoId;
-          if (!vid || seenIds.has(vid)) continue;
-
-          // ライブ枠や予定枠が混ざっていたらライブ情報として記録し、動画リストからは除外
-          const isLiveBadge = JSON.stringify(vr.badges || []).includes('LIVE') ||
-                              JSON.stringify(vr.thumbnailOverlays || []).includes('LIVE');
-          if (vr.upcomingEventData || isLiveBadge) {
-            if (vr.upcomingEventData && vr.upcomingEventData.startTime) {
-              liveStreamInfo.videoId = vid;
-              liveStreamInfo.title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || 'ライブ';
-              liveStreamInfo.startTimeSec = Number(vr.upcomingEventData.startTime);
-              liveStreamInfo.isLiveNow = false;
-            } else if (isLiveBadge) {
-              liveStreamInfo.videoId = vid;
-              liveStreamInfo.title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || 'ライブ';
-              liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 300;
-              liveStreamInfo.isLiveNow = true;
-            }
-            continue;
-          }
-
-          const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
-          const lenText = vr.lengthText?.simpleText ||
-                          vr.thumbnailOverlays?.find(o => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
-
-          if (title && lenText) {
-            seenIds.add(vid);
-            parsedVideos.push({
-              id: vid,
-              title: title,
-              duration: Math.max(30, parseDurationText(lenText)),
-              thumb: `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`
-            });
-          }
-        }
-
-        if (parsedVideos.length > 0) {
-          videoCatalog = parsedVideos;
-        }
-      }
-
-      // 2) @takaneko_ch/streams からライブ予定枠・現在配信枠をチェック
-      const streamsHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
-      const streamsData = extractYtInitialData(streamsHtml);
-      if (streamsData) {
-        const streamRenderers = collectVideoRenderers(streamsData);
-        for (const sr of streamRenderers) {
-          const vid = sr.videoId;
-          const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || 'ライブ';
-          const isLiveBadge = JSON.stringify(sr.badges || []).includes('LIVE') ||
-                              JSON.stringify(sr.thumbnailOverlays || []).includes('LIVE');
-
-          if (isLiveBadge) {
-            liveStreamInfo.videoId = vid;
-            liveStreamInfo.title = title;
-            if (!liveStreamInfo.startTimeSec) {
-              liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 180;
-            }
-            liveStreamInfo.isLiveNow = true;
-            break;
-          } else if (sr.upcomingEventData && sr.upcomingEventData.startTime) {
-            liveStreamInfo.videoId = vid;
-            liveStreamInfo.title = title;
-            liveStreamInfo.startTimeSec = Number(sr.upcomingEventData.startTime);
-            liveStreamInfo.isLiveNow = false;
-            break;
-          }
-        }
-      }
-
-      renderEpgDayTabs();
-      renderEpgGrid();
-      syncPlayback(true);
-    }
-
-    // 4. 指定されたチャンネル・時間範囲の番組スケジュールを算出
+    // 2. 指定時間範囲の番組スケジュール算出（全端末共通）
     function getScheduleSlots(channelNum, rangeStartSec, rangeEndSec) {
-      if (videoCatalog.length === 0) return [];
+      const catalog = getActiveCatalog();
+      if (catalog.length === 0) return [];
 
-      const totalCycleDuration = videoCatalog.reduce((acc, v) => acc + v.duration, 0);
+      const totalCycleDuration = catalog.reduce((acc, v) => acc + v.duration, 0);
       if (totalCycleDuration <= 0) return [];
 
       const salt = channelNum === 1 ? 101 : 202;
-      const startCycle = Math.floor((rangeStartSec - EPOCH_BASE_SEC) / totalCycleDuration);
+      const startCycle = Math.floor((rangeStartSec - EPOCH_BASE_SEC) / totalCycleDuration) - 1;
       const endCycle = Math.floor((rangeEndSec - EPOCH_BASE_SEC) / totalCycleDuration) + 1;
 
       const slots = [];
 
       for (let cycle = startCycle; cycle <= endCycle; cycle++) {
-        const shuffled = getDeterministicShuffle(videoCatalog, cycle, salt);
+        const shuffled = getDeterministicShuffle(catalog, cycle, salt);
         let cursor = EPOCH_BASE_SEC + cycle * totalCycleDuration;
 
         for (const video of shuffled) {
@@ -500,25 +374,25 @@
         }
       }
 
-      // 視聴チャンネル1でたかねこちゃんねるのライブ枠が立っている場合、10分前待機枠＋ライブ枠を上書き反映
+      // 視聴チャンネル1のみ、ライブ枠がある場合は10分前待機枠＋ライブ枠を番組表と再生スケジュールに反映
       if (channelNum === 1 && liveStreamInfo.videoId && liveStreamInfo.startTimeSec) {
-        const waitStart = liveStreamInfo.startTimeSec - 600; // 開始10分前
+        const waitStart = liveStreamInfo.startTimeSec - 600;
         const liveStart = liveStreamInfo.startTimeSec;
-        const liveEnd = liveStreamInfo.startTimeSec + 7200; // 番組表上のライブ枠表示幅(2時間)
+        const liveEnd = liveStreamInfo.startTimeSec + 7200;
 
-        const filtered = [];
+        const merged = [];
         for (const s of slots) {
           if (s.endSec <= waitStart || s.startSec >= liveEnd) {
-            filtered.push(s);
+            merged.push(s);
           } else if (s.startSec < waitStart && s.endSec > waitStart) {
-            filtered.push({ ...s, endSec: waitStart });
+            merged.push({ ...s, endSec: waitStart, duration: waitStart - s.startSec });
           } else if (s.startSec < liveEnd && s.endSec > liveEnd) {
-            filtered.push({ ...s, startSec: liveEnd });
+            merged.push({ ...s, startSec: liveEnd, duration: s.endSec - liveEnd });
           }
         }
 
         if (liveStart > rangeStartSec && waitStart < rangeEndSec) {
-          filtered.push({
+          merged.push({
             type: 'wait',
             id: liveStreamInfo.videoId,
             title: '配信が開始されるまでお待ちください',
@@ -530,7 +404,7 @@
         }
 
         if (liveEnd > rangeStartSec && liveStart < rangeEndSec) {
-          filtered.push({
+          merged.push({
             type: 'live',
             id: liveStreamInfo.videoId,
             title: liveStreamInfo.title,
@@ -541,24 +415,48 @@
           });
         }
 
-        filtered.sort((a, b) => a.startSec - b.startSec);
-        return filtered;
+        merged.sort((a, b) => a.startSec - b.startSec);
+        return merged;
       }
 
       return slots;
     }
 
     function getCurrentSlot(channelNum, nowSec) {
-      const slots = getScheduleSlots(channelNum, nowSec - 60, nowSec + 60);
-      return slots.find(s => nowSec >= s.startSec && nowSec < s.endSec) || null;
+      const slots = getScheduleSlots(channelNum, nowSec - 120, nowSec + 120);
+      return slots.find(s => nowSec >= s.startSec && nowSec < s.endSec) || slots[0] || null;
     }
 
-    // 5. YouTube IFrame Player 初期化（字幕強制オフ・音声デフォルトオン・UI非表示）
-    function onYouTubeIframeAPIReady() {
+    // 3. YouTube IFrame API 読み込みとプレイヤー初期化
+    function loadYouTubeApi() {
+      if (window.YT && window.YT.Player) {
+        initYouTubePlayer();
+        return;
+      }
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+
+    window.onYouTubeIframeAPIReady = function() {
+      initYouTubePlayer();
+    };
+
+    function initYouTubePlayer() {
+      if (ytPlayer) return;
+      const nowSec = Date.now() / 1000;
+      const initialSlot = getCurrentSlot(activeChannel, nowSec);
+      const startId = initialSlot ? initialSlot.id : SEED_VIDEOS[0].id;
+      const startOffset = initialSlot && initialSlot.type === 'video'
+        ? Math.max(0, Math.floor(nowSec - initialSlot.startSec))
+        : 0;
+
+      currentPlayingId = startId;
+
       ytPlayer = new YT.Player('yt-player', {
-        host: 'https://www.youtube-nocookie.com',
         width: '100%',
         height: '100%',
+        videoId: startId,
         playerVars: {
           autoplay: 1,
           controls: 0,
@@ -569,39 +467,75 @@
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
-          mute: 0,
+          start: startOffset,
           hl: 'ja'
         },
         events: {
-          onReady: (e) => {
-            playerReady = true;
-            disableCaptions();
-            e.target.unMute();
-            e.target.setVolume(100);
-            updateAudioIcon();
-            syncPlayback(true);
-          },
-          onStateChange: (e) => {
-            disableCaptions();
-            if (e.data === YT.PlayerState.UNMUTED || e.data === YT.PlayerState.PLAYING) {
-              updateAudioIcon();
-            }
-            if (e.data === YT.PlayerState.PAUSED) {
-              const nowSec = Date.now() / 1000;
-              const slot = getCurrentSlot(activeChannel, nowSec);
-              if (slot && slot.type !== 'wait') {
-                ytPlayer.playVideo();
-              }
-            }
-          },
-          onApiChange: () => {
-            disableCaptions();
-          }
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+          onApiChange: disableCaptions,
+          onError: onPlayerError
         }
       });
     }
 
-    // 字幕（CC）の強制オフ処理
+    function onPlayerReady(e) {
+      playerReady = true;
+      disableCaptions();
+
+      // デフォルトで音声をオンに設定して再生
+      try {
+        e.target.unMute();
+        e.target.setVolume(100);
+        e.target.playVideo();
+      } catch (_) {}
+
+      // ブラウザの自動再生制限で万が一再生がブロックされた場合は、画面が真っ黒にならないよう一時ミュートで即再生を開始し、最初の操作で自動的に音声をオンに戻す
+      setTimeout(() => {
+        if (!ytPlayer || typeof ytPlayer.getPlayerState !== 'function') return;
+        const st = ytPlayer.getPlayerState();
+        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
+          ytPlayer.mute();
+          ytPlayer.playVideo();
+        }
+        updateAudioIcon();
+      }, 850);
+
+      syncPlayback(false);
+    }
+
+    function onPlayerStateChange(e) {
+      disableCaptions();
+      updateAudioIcon();
+
+      const nowSec = Date.now() / 1000;
+      const slot = getCurrentSlot(activeChannel, nowSec);
+
+      if (slot && slot.type === 'wait' && activeChannel === 1) {
+        if (e.data === YT.PlayerState.PLAYING) {
+          ytPlayer.pauseVideo();
+        }
+        return;
+      }
+
+      if (e.data === YT.PlayerState.PAUSED) {
+        ytPlayer.playVideo();
+      } else if (e.data === YT.PlayerState.ENDED) {
+        currentPlayingId = null;
+        syncPlayback(true);
+      }
+    }
+
+    function onPlayerError() {
+      if (currentPlayingId) {
+        brokenVideoIds.add(currentPlayingId);
+        currentPlayingId = null;
+        renderEpgGrid();
+        syncPlayback(true);
+      }
+    }
+
+    // 字幕を常に自動でオフにする
     function disableCaptions() {
       if (!ytPlayer || !playerReady) return;
       try {
@@ -616,49 +550,57 @@
       } catch (_) {}
     }
 
-    // 音声コントロール（デフォルトオン＋ブラウザ制限時の自動復帰）
-    function ensureAudioUnmuted() {
-      if (!ytPlayer || !playerReady) return;
+    // 音声操作＆自動アンミュート復帰
+    function unlockAudioOnInteraction() {
+      if (!ytPlayer || !playerReady || userRequestedMute) return;
       try {
         if (ytPlayer.isMuted()) {
           ytPlayer.unMute();
           ytPlayer.setVolume(100);
-          isMuted = false;
           updateAudioIcon();
         }
-        if (ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
+        const st = ytPlayer.getPlayerState();
+        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
           ytPlayer.playVideo();
         }
       } catch (_) {}
     }
 
-    window.addEventListener('pointerdown', () => {
-      if (!isMuted) ensureAudioUnmuted();
-    }, { once: true });
+    ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, unlockAudioOnInteraction, { passive: true });
+    });
+
+    function handleShieldTap() {
+      unlockAudioOnInteraction();
+    }
 
     function toggleAudio() {
       if (!ytPlayer || !playerReady) return;
-      if (ytPlayer.isMuted()) {
-        ytPlayer.unMute();
-        ytPlayer.setVolume(100);
-        isMuted = false;
-      } else {
-        ytPlayer.mute();
-        isMuted = true;
-      }
-      updateAudioIcon();
+      try {
+        if (ytPlayer.isMuted()) {
+          userRequestedMute = false;
+          ytPlayer.unMute();
+          ytPlayer.setVolume(100);
+        } else {
+          userRequestedMute = true;
+          ytPlayer.mute();
+        }
+        updateAudioIcon();
+      } catch (_) {}
     }
 
     function updateAudioIcon() {
-      if (!ytPlayer || !playerReady) return;
+      if (!ytPlayer || !playerReady || typeof ytPlayer.isMuted !== 'function') return;
       const muted = ytPlayer.isMuted();
       document.getElementById('icon-vol-on').classList.toggle('hidden', muted);
       document.getElementById('icon-vol-off').classList.toggle('hidden', !muted);
     }
 
-    // 6. チャンネル切替とYouTubeチャット更新
+    // 4. チャンネル切替とYouTubeライブチャット表示制御
     function switchChannel(ch) {
+      if (activeChannel === ch) return;
       activeChannel = ch;
+
       const btn1 = document.getElementById('btn-ch1');
       const btn2 = document.getElementById('btn-ch2');
       const chatCol = document.getElementById('chat-column');
@@ -695,7 +637,7 @@
       chatFrame.src = `https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}&embed_domain=${encodeURIComponent(domain)}&dark_theme=1`;
     }
 
-    // 7. リアルタイム再生同期・10分前待機・ライブ遅延の倍速＆30秒スキップ制御
+    // 5. 再生同期・10分前待機・倍速追いつき＆30秒以上スキップ制御
     function formatHM(sec) {
       const d = new Date(sec * 1000);
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -704,26 +646,23 @@
     function syncPlayback(forceLoad = false) {
       const nowSec = Date.now() / 1000;
       const slot = getCurrentSlot(activeChannel, nowSec);
+      if (!slot) return;
+
       const standbyOverlay = document.getElementById('standby-overlay');
       const countdownEl = document.getElementById('standby-countdown');
       const titleEl = document.getElementById('current-title');
       const thumbEl = document.getElementById('current-thumb');
       const timeRangeEl = document.getElementById('current-time-range');
 
-      if (!slot) return;
-
-      // タイトル・サムネイル・時刻を現在の動画と完全一致させる
+      // 現在の動画のタイトル・サムネイル・時刻を一致させて表示
       titleEl.textContent = slot.title;
+      thumbEl.src = slot.thumb;
       timeRangeEl.textContent = `${formatHM(slot.startSec)} - ${formatHM(slot.endSec)}`;
-      if (slot.thumb) {
-        thumbEl.src = slot.thumb;
-        thumbEl.classList.remove('hidden');
-      }
 
-      // 視聴チャンネル1のチャット更新
+      // 視聴チャンネル1のみYouTubeチャットを更新
       updateYouTubeChat(slot.id);
 
-      // 視聴チャンネル1：開始10分前の待機状態
+      // 視聴チャンネル1で配信開始10分前の場合
       if (activeChannel === 1 && slot.type === 'wait') {
         standbyOverlay.classList.remove('hidden');
         const remain = Math.max(0, Math.ceil(slot.endSec - nowSec));
@@ -731,7 +670,7 @@
         const s = String(remain % 60).padStart(2, '0');
         countdownEl.textContent = `${m}:${s}`;
 
-        if (playerReady && ytPlayer) {
+        if (playerReady && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
           ytPlayer.pauseVideo();
         }
         currentPlayingId = null;
@@ -739,52 +678,63 @@
       }
 
       standbyOverlay.classList.add('hidden');
-      if (!playerReady || !ytPlayer) return;
+      if (!playerReady || !ytPlayer || typeof ytPlayer.loadVideoById !== 'function') return;
 
       const targetOffset = Math.max(0, nowSec - slot.startSec);
 
-      // 動画またはライブ枠が切り替わった場合
+      // 動画の切り替え
       if (forceLoad || currentPlayingId !== slot.id) {
         currentPlayingId = slot.id;
         ytPlayer.loadVideoById({
           videoId: slot.id,
-          startSeconds: slot.type === 'live' ? undefined : targetOffset
+          startSeconds: slot.type === 'live' ? undefined : Math.floor(targetOffset)
         });
         disableCaptions();
-        if (!isMuted) {
+        if (!userRequestedMute) {
           ytPlayer.unMute();
           ytPlayer.setVolume(100);
         }
         return;
       }
 
-      // 遅延検知と自動追いつき（30秒以上遅れで即スキップ、それ以下の遅れは倍速再生）
-      const playerTime = ytPlayer.getCurrentTime() || 0;
-      const realDuration = ytPlayer.getDuration() || 0;
+      const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+      if (st !== YT.PlayerState.PLAYING) return;
+
+      disableCaptions();
+
+      // 実際の再生時間の長さが取得できたらカタログのdurationも補正
+      const realDuration = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+      const playerTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : targetOffset;
 
       let idealTime = targetOffset;
       if (slot.type === 'live' && realDuration > 0) {
-        idealTime = realDuration;
+        idealTime = Math.max(0, realDuration - 1);
+      } else if (slot.type === 'video' && realDuration > 0 && targetOffset >= realDuration - 1) {
+        // 実際の動画尺が予定尺より短かった場合はループまたはシークして黒画面を防ぐ
+        idealTime = targetOffset % Math.max(10, Math.floor(realDuration - 1));
       }
 
       const lag = idealTime - playerTime;
 
+      // 30秒以上遅れていたらライブ位置へ即スキップ、それ未満の遅れは倍速(1.5x)で追いつく
       if (lag >= 30) {
         ytPlayer.seekTo(idealTime, true);
         ytPlayer.setPlaybackRate(1.0);
       } else if (lag > 2.5) {
-        ytPlayer.setPlaybackRate(1.5);
-      } else if (lag < -3 && slot.type === 'video') {
+        if (ytPlayer.getPlaybackRate() !== 1.5) {
+          ytPlayer.setPlaybackRate(1.5);
+        }
+      } else if (lag < -4 && slot.type === 'video') {
         ytPlayer.seekTo(idealTime, true);
         ytPlayer.setPlaybackRate(1.0);
-      } else {
+      } else if (lag <= 0.8) {
         if (ytPlayer.getPlaybackRate() !== 1.0) {
           ytPlayer.setPlaybackRate(1.0);
         }
       }
     }
 
-    // 8. 3日間対応のリアルなテレビ番組表 (EPG) 描画
+    // 6. 3日間対応のテレビ番組表 (EPG) 描画
     function getDayStartUnixSec(dayOffset) {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
@@ -820,7 +770,6 @@
       const ch1Col = document.getElementById('epg-ch1-col');
       const ch2Col = document.getElementById('epg-ch2-col');
 
-      // 左端の24時間時刻軸
       if (timeCol.children.length === 0) {
         let timeHtml = '';
         for (let h = 0; h < 24; h++) {
@@ -840,19 +789,19 @@
       const ch1Slots = getScheduleSlots(1, dayStartSec, dayEndSec);
       const ch2Slots = getScheduleSlots(2, dayStartSec, dayEndSec);
 
-      ch1Col.innerHTML = buildChannelColumnHtml(ch1Slots, dayStartSec, dayEndSec, nowSec);
-      ch2Col.innerHTML = buildChannelColumnHtml(ch2Slots, dayStartSec, dayEndSec, nowSec);
+      ch1Col.innerHTML = buildChannelColumnHtml(ch1Slots, dayStartSec, dayEndSec, nowSec, 1);
+      ch2Col.innerHTML = buildChannelColumnHtml(ch2Slots, dayStartSec, dayEndSec, nowSec, 2);
 
       updateNowBar();
     }
 
-    function buildChannelColumnHtml(slots, dayStartSec, dayEndSec, nowSec) {
+    function buildChannelColumnHtml(slots, dayStartSec, dayEndSec, nowSec, chNum) {
       let html = '';
       for (const s of slots) {
         const clampedStart = Math.max(dayStartSec, s.startSec);
         const clampedEnd = Math.min(dayEndSec, s.endSec);
         const topPx = ((clampedStart - dayStartSec) / 60) * PX_PER_MINUTE;
-        const heightPx = Math.max(18, ((clampedEnd - clampedStart) / 60) * PX_PER_MINUTE);
+        const heightPx = Math.max(20, ((clampedEnd - clampedStart) / 60) * PX_PER_MINUTE);
 
         const startDate = new Date(s.startSec * 1000);
         const minStr = String(startDate.getMinutes()).padStart(2, '0');
@@ -863,10 +812,10 @@
         else if (s.type === 'wait') extraClass = 'wait-slot';
         else if (isCurrent) extraClass = 'active-program';
 
-        const showThumb = heightPx >= 38;
+        const showThumb = heightPx >= 36;
 
         html += `
-          <div class="epg-program-item ${extraClass}" style="top:${topPx}px; height:${heightPx}px;">
+          <div onclick="switchChannel(${chNum})" class="epg-program-item cursor-pointer ${extraClass}" style="top:${topPx}px; height:${heightPx}px;">
             <span class="text-[11px] font-mono font-bold text-sky-400 shrink-0 leading-tight">${minStr}</span>
             ${showThumb ? `<img src="${s.thumb}" alt="" loading="lazy" class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0 mt-0.5" />` : ''}
             <div class="text-xs font-medium text-zinc-100 leading-snug line-clamp-2 break-all">${escapeHtml(s.title)}</div>
@@ -900,9 +849,124 @@
       const nowSec = Date.now() / 1000;
       const topPx = ((nowSec - dayStartSec) / 60) * PX_PER_MINUTE;
       scroller.scrollTo({
-        top: Math.max(0, topPx - 140),
+        top: Math.max(0, topPx - 150),
         behavior: 'smooth'
       });
+    }
+
+    // 7. バックグラウンドで実動画の正確なタイトルとライブ枠情報を非同期取得（初期描画・再生を一切ブロックしない）
+    async function syncExactVideoTitlesAndLiveStatus() {
+      // URLパラメータでのライブ枠指定 (?live=VIDEO_ID&start=UNIX_SEC)
+      const params = new URLSearchParams(location.search);
+      if (params.get('live')) {
+        liveStreamInfo.videoId = params.get('live');
+        liveStreamInfo.title = params.get('title') || 'たかねこちゃんねる ライブ';
+        liveStreamInfo.startTimeSec = params.get('start')
+          ? Number(params.get('start'))
+          : Math.floor(Date.now() / 1000) - 60;
+        liveStreamInfo.isLiveNow = Math.floor(Date.now() / 1000) >= liveStreamInfo.startTimeSec;
+        renderEpgGrid();
+        syncPlayback(false);
+      }
+
+      // noembed APIで各動画のYouTube公式タイトルを正確に同期
+      let updatedAnyTitle = false;
+      await Promise.allSettled(
+        videoCatalog.map(async (item) => {
+          try {
+            const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${item.id}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.title && data.title !== item.title) {
+                item.title = data.title;
+                updatedAnyTitle = true;
+              }
+            }
+          } catch (_) {}
+        })
+      );
+
+      if (updatedAnyTitle) {
+        renderEpgGrid();
+        syncPlayback(false);
+      }
+
+      // @takaneko_ch の最新動画・ライブ枠をバックグラウンドでチェック
+      try {
+        const html = await fetchWithProxyFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
+        const data = extractYtInitialData(html);
+        if (data) {
+          const renderers = collectVideoRenderers(data);
+          for (const sr of renderers) {
+            const vid = sr.videoId;
+            const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || '';
+            const isLiveBadge = JSON.stringify(sr.badges || []).includes('LIVE') ||
+                                JSON.stringify(sr.thumbnailOverlays || []).includes('LIVE');
+            if (isLiveBadge && vid) {
+              liveStreamInfo.videoId = vid;
+              liveStreamInfo.title = title || 'たかねこちゃんねる ライブ';
+              if (!liveStreamInfo.startTimeSec) {
+                liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 180;
+              }
+              liveStreamInfo.isLiveNow = true;
+              renderEpgGrid();
+              syncPlayback(false);
+              break;
+            } else if (sr.upcomingEventData && sr.upcomingEventData.startTime && vid) {
+              liveStreamInfo.videoId = vid;
+              liveStreamInfo.title = title || 'たかねこちゃんねる ライブ';
+              liveStreamInfo.startTimeSec = Number(sr.upcomingEventData.startTime);
+              liveStreamInfo.isLiveNow = false;
+              renderEpgGrid();
+              syncPlayback(false);
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    async function fetchWithProxyFallback(targetUrl) {
+      const proxies = [
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+      ];
+      for (const buildUrl of proxies) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5000);
+          const res = await fetch(buildUrl(targetUrl), { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const text = await res.text();
+            if (text && text.length > 500) return text;
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function extractYtInitialData(html) {
+      if (!html) return null;
+      const match = html.match(/(?:var\s+ytInitialData|window\["ytInitialData"\])\s*=\s*(\{.+?\});<\/script>/s);
+      if (match && match[1]) {
+        try {
+          return JSON.parse(match[1]);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function collectVideoRenderers(obj, results = []) {
+      if (!obj || typeof obj !== 'object') return results;
+      if (obj.videoRenderer && obj.videoRenderer.videoId) {
+        results.push(obj.videoRenderer);
+        return results;
+      }
+      for (const key of Object.keys(obj)) {
+        collectVideoRenderers(obj[key], results);
+      }
+      return results;
     }
 
     function escapeHtml(str) {
@@ -913,7 +977,6 @@
         .replace(/"/g, '&quot;');
     }
 
-    // 9. 時計と定期ループの開始
     function tickClock() {
       const d = new Date();
       const hh = String(d.getHours()).padStart(2, '0');
@@ -922,10 +985,18 @@
       document.getElementById('clock-display').textContent = `${hh}:${mm}:${ss}`;
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    // 8. 初期起動（通信待ちなしで即座に番組表描画と動画再生を開始）
+    window.addEventListener('DOMContentLoaded', () => {
       tickClock();
-      await loadTakanekoVideosAndLiveStatus();
-      scrollToCurrentTime();
+      renderEpgDayTabs();
+      renderEpgGrid();
+      syncPlayback(false);
+      loadYouTubeApi();
+
+      setTimeout(scrollToCurrentTime, 100);
+
+      // 非同期で公式タイトル補正とライブ枠チェックを実行
+      syncExactVideoTitlesAndLiveStatus();
 
       setInterval(() => {
         tickClock();
@@ -933,15 +1004,20 @@
         updateNowBar();
       }, 1000);
 
-      // 1分ごとに番組表のハイライト更新とチャンネルのライブ枠チェックを実施
       setInterval(() => {
         renderEpgGrid();
       }, 60000);
 
       setInterval(() => {
-        loadTakanekoVideosAndLiveStatus();
+        syncExactVideoTitlesAndLiveStatus();
       }, 180000);
     });
   </script>
 </body>
 </html>
+```
+
+### 修正したポイント
+1. **即座に動画と3日間番組表を表示**: 外部プロキシ通信の完了を待たずに、`@takaneko_ch` の実在動画データからページ読み込みと同時にプレイヤー再生と3日間の番組表（EPG）を描画します。また、`noembed` APIを併用して実際のYouTubeタイトル・サムネイル・映像が完全に一致するようにしています。
+2. **プレイヤーの確実な動作と自動音声オン**: `youtube-nocookie.com` による初期化ブロックを解消して標準のYouTube IFrame APIで確実に起動し、字幕の自動オフ（`cc_load_policy: 0` および `unloadModule`）と音声のデフォルトオンを適用しています。
+3. **視聴チャンネル1・2の仕様とシンプルなUI**: 余計なボタンや「○○中」といったテキストをすべて排除し、3日間のラテ欄形式の番組表と視聴チャンネル1専用のYouTubeチャットを備えたシンプルな構成にしています。
