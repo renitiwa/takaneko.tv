@@ -1,2297 +1,908 @@
 <!DOCTYPE html>
-<html lang="ja" class="dark">
+<html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TAKANEKO.TV | たかねこちゃんねる 24時間リアルタイム放送局</title>
-  <!-- Tailwind CSS -->
+  <title>TAKANEKO.TV</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          colors: {
-            tv: {
-              bg: '#06080f',
-              panel: '#0d121f',
-              card: '#131b2e',
-              border: '#1e2942',
-              orange: '#ff6b2b',
-              cyan: '#00f0ff',
-              pink: '#ff2a85',
-              emerald: '#00e676'
-            }
-          },
-          animation: {
-            'pulse-fast': 'pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            'spin-slow': 'spin 8s linear infinite',
-          }
-        }
-      }
-    }
-  </script>
-
   <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
     body {
-      background-color: #06080f;
-      background-image: 
-        radial-gradient(circle at 12% 15%, rgba(255, 107, 43, 0.08) 0%, transparent 35%),
-        radial-gradient(circle at 88% 10%, rgba(0, 240, 255, 0.07) 0%, transparent 35%),
-        radial-gradient(circle at 50% 90%, rgba(255, 42, 133, 0.05) 0%, transparent 40%);
-      color: #f1f5f9;
+      background-color: #0a0a0c;
+      color: #f4f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      margin: 0;
+      padding: 0;
       overflow-x: hidden;
     }
 
-    /* Liquid Glass UI Styling */
-    .glass-panel {
-      background: rgba(13, 18, 31, 0.82);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .glass-card {
-      background: rgba(19, 27, 46, 0.72);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-    }
-
-    /* YouTube Native UI Complete Concealment Cropper */
-    /* Hides YouTube top title bar, watch later, share, watermark, and pause overlays */
-    .yt-clean-viewport {
+    /* YouTube UI完全非表示用コンテナ */
+    .video-viewport {
       position: relative;
       width: 100%;
-      padding-top: 56.25%; /* 16:9 Aspect Ratio */
-      overflow: hidden;
+      aspect-ratio: 16 / 9;
       background: #000;
-      border-radius: 0.875rem;
-      user-select: none;
+      overflow: hidden;
     }
-
-    .yt-crop-inner {
+    .video-crop-wrapper {
       position: absolute;
-      top: -72px;
+      top: -68px;
       left: -2px;
       width: calc(100% + 4px);
-      height: calc(100% + 144px);
-      pointer-events: none; /* Prevents clicking YouTube native UI */
+      height: calc(100% + 136px);
+      pointer-events: none;
     }
-
-    .yt-crop-inner iframe {
+    .video-crop-wrapper iframe {
       width: 100%;
       height: 100%;
       border: 0;
       pointer-events: none;
     }
 
-    /* Custom Scrollbars */
+    /* リアルなテレビ番組表 (EPG / ラテ欄) */
+    .epg-scroll-container {
+      position: relative;
+      height: 520px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: #121316;
+      border: 1px solid #26272b;
+    }
+    .epg-header-row {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: grid;
+      grid-template-columns: 48px 1fr 1fr;
+      background: #1a1c20;
+      border-bottom: 2px solid #2e3138;
+    }
+    .epg-body-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: 48px 1fr 1fr;
+      height: 4320px; /* 24時間 × 180px (1分 = 3px) */
+    }
+    .epg-time-axis {
+      background: #16181c;
+      border-right: 1px solid #2a2d34;
+      position: relative;
+    }
+    .epg-hour-cell {
+      height: 180px;
+      border-bottom: 1px solid #2a2d34;
+      display: flex;
+       flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #a0a5b1;
+    }
+    .epg-hour-cell.morning { background: rgba(56, 189, 248, 0.04); }
+    .epg-hour-cell.daytime { background: rgba(250, 204, 21, 0.04); }
+    .epg-hour-cell.prime   { background: rgba(244, 63, 94, 0.05); }
+    .epg-hour-cell.night   { background: rgba(99, 102, 241, 0.04); }
+
+    .epg-channel-col {
+      position: relative;
+      border-right: 1px solid #2a2d34;
+      background-image: linear-gradient(to bottom, #22242a 1px, transparent 1px);
+      background-size: 100% 180px;
+    }
+    .epg-program-item {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-bottom: 1px solid #2a2d34;
+      padding: 4px 8px;
+      overflow: hidden;
+      background: #141619;
+      transition: background 0.15s;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .epg-program-item:hover {
+      background: #1d2026;
+      z-index: 10;
+    }
+    .epg-program-item.active-program {
+      background: #1e2430;
+      border-left: 3px solid #3b82f6;
+    }
+    .epg-program-item.live-slot {
+      background: #2b1419;
+      border-left: 3px solid #ef4444;
+    }
+    .epg-program-item.wait-slot {
+      background: #262012;
+      border-left: 3px solid #f59e0b;
+    }
+
+    /* 現在時刻の赤線 */
+    .epg-now-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #ef4444;
+      z-index: 25;
+      pointer-events: none;
+    }
+    .epg-now-line::before {
+      content: "";
+      position: absolute;
+      left: 44px;
+      top: -4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+
+    /* スクロールバー */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #090d16;
+      background: #0f1012;
     }
     ::-webkit-scrollbar-thumb {
-      background: #263554;
-      border-radius: 9999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #ff6b2b;
-    }
-
-    /* Standby Screen Scanline & Glow */
-    .scanline-overlay {
-      background: linear-gradient(
-        to bottom,
-        rgba(255,255,255,0),
-        rgba(255,255,255,0) 50%,
-        rgba(0, 0, 0, 0.22) 50%,
-        rgba(0, 0, 0, 0.22)
-      );
-      background-size: 100% 4px;
-    }
-
-    @keyframes radar-ring {
-      0% { transform: scale(0.85); opacity: 0.75; }
-      100% { transform: scale(1.75); opacity: 0; }
-    }
-    .radar-circle::before {
-      content: '';
-      position: absolute;
-      inset: -8px;
-      border-radius: 9999px;
-      border: 2px solid #ff6b2b;
-      animation: radar-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+      background: #2e3138;
+      border-radius: 3px;
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col selection:bg-tv-orange selection:text-white">
+<body class="min-h-screen flex flex-col">
 
-  <!-- ==================== TOP HEADER ==================== -->
-  <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-3 sm:px-6 py-2.5">
-    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
-      
-      <!-- Brand Logo & Station Tag -->
-      <div class="flex items-center gap-3">
-        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-tv-orange via-pink-600 to-amber-500 shadow-lg shadow-tv-orange/25">
-          <i class="fa-solid fa-cat text-white text-xl"></i>
-          <span class="absolute -top-1 -right-1 flex h-3 w-3">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-slate-900"></span>
-          </span>
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="font-black text-xl sm:text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-orange-100 to-tv-orange">
-              TAKANEKO.TV
-            </span>
-            <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 rounded-full">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
-              24H SYNC STREAM
-            </span>
-          </div>
-          <p class="text-[11px] text-slate-400 hidden sm:block">
-            たかねこちゃんねる公式動画・生配信連動インターネット放送局
-          </p>
-        </div>
-      </div>
-
-      <!-- Channel Switcher Tabs (CH1 & CH2) -->
-      <div class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-inner order-3 lg:order-2 w-full lg:w-auto justify-center">
-        <button
-          id="tab-ch1"
-          onclick="switchChannel(1)"
-          class="flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 bg-gradient-to-r from-tv-orange to-pink-600 text-white shadow-md shadow-tv-orange/25"
-        >
-          <span class="px-1.5 py-0.5 text-[10px] font-mono bg-black/30 rounded">CH1</span>
-          <span>視聴チャンネル1</span>
-          <span id="ch1-header-badge" class="px-1.5 py-0.5 text-[10px] rounded bg-white/20 text-white font-semibold">
-            LIVE連動
-          </span>
+  <!-- シンプルなヘッダー -->
+  <header class="h-14 px-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-6">
+      <div class="text-lg font-black tracking-wider text-white">TAKANEKO.TV</div>
+      <nav class="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+        <button id="btn-ch1" onclick="switchChannel(1)" class="px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black">
+          視聴チャンネル1
         </button>
-
-        <button
-          id="tab-ch2"
-          onclick="switchChannel(2)"
-          class="flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white"
-        >
-          <span class="px-1.5 py-0.5 text-[10px] font-mono bg-slate-800 rounded">CH2</span>
-          <span>視聴チャンネル2</span>
-          <span class="px-1.5 py-0.5 text-[10px] rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-semibold">
-            動画専門
-          </span>
+        <button id="btn-ch2" onclick="switchChannel(2)" class="px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white">
+          視聴チャンネル2
         </button>
-      </div>
+      </nav>
+    </div>
 
-      <!-- Right Controls: JST Synchronized Clock, Modals & Official Channel Link -->
-      <div class="flex items-center gap-2 sm:gap-3 order-2 lg:order-3">
-        <!-- Synchronized JST Clock -->
-        <div class="hidden md:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl">
-          <i class="fa-regular fa-clock text-tv-cyan text-xs"></i>
-          <div class="text-right">
-            <div class="text-[10px] text-slate-400 leading-none font-medium">JST 全端末同期時刻</div>
-            <div id="jst-clock" class="font-mono text-xs sm:text-sm font-bold text-white tracking-wider">
-              --:--:--
-            </div>
-          </div>
-        </div>
-
-        <!-- Video Pool Manager Button -->
-        <button
-          onclick="openVideoModal()"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-slate-200 transition"
-          title="放送動画リストの追加・管理"
-        >
-          <i class="fa-solid fa-film text-tv-cyan"></i>
-          <span class="hidden sm:inline">動画管理</span>
-        </button>
-
-        <!-- Official YouTube Channel Link -->
-        <a
-          href="https://www.youtube.com/@takaneko_ch"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-xs font-bold text-red-300 transition"
-        >
-          <i class="fa-brands fa-youtube text-red-500 text-sm"></i>
-          <span class="hidden sm:inline">たかねこちゃんねる</span>
-          <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-75"></i>
-        </a>
-      </div>
-
+    <div class="flex items-center gap-3">
+      <button id="btn-audio" onclick="toggleAudio()" class="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition" title="音声切替">
+        <svg id="icon-vol-on" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        </svg>
+        <svg id="icon-vol-off" class="w-4 h-4 hidden text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+        </svg>
+      </button>
+      <div id="clock-display" class="text-xs font-mono text-zinc-400 tabular-nums">00:00:00</div>
     </div>
   </header>
 
-  <!-- ==================== LIVE SCHEDULE SIMULATOR & CONTROL BAR ==================== -->
-  <div class="bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-6 py-2">
-    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+  <!-- メイン視聴エリア -->
+  <main class="max-w-[1600px] w-full mx-auto p-4 flex-1 flex flex-col gap-4">
+    <div id="stage-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
       
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="inline-flex items-center gap-1.5 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg">
-          <i class="fa-solid fa-satellite-dish animate-pulse"></i>
-          <span>たかねこちゃんねる配信枠連動コントローラー:</span>
-        </span>
+      <!-- プレイヤー領域 -->
+      <div id="player-column" class="lg:col-span-9 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+        <div class="video-viewport">
+          <div class="video-crop-wrapper">
+            <div id="yt-player"></div>
+          </div>
 
-        <!-- Mode 1: Normal Pseudo-Live -->
-        <button
-          id="sim-btn-normal"
-          onclick="setLiveFrameScenario('NONE')"
-          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-        >
-          <i class="fa-solid fa-shuffle"></i>
-          <span>① 通常時（枠なし・ランダム動画放送）</span>
-        </button>
+          <!-- クリック透過防止＆初回タッチ時アンミュート用透明レイヤー -->
+          <div id="interaction-shield" onclick="ensureAudioUnmuted()" class="absolute inset-0 z-10"></div>
 
-        <!-- Mode 2: 10 Minutes Before Live Standby -->
-        <button
-          id="sim-btn-standby"
-          onclick="setLiveFrameScenario('STANDBY_10MIN')"
-          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-        >
-          <i class="fa-solid fa-hourglass-half text-amber-400"></i>
-          <span>② 枠あり：開始10分前待機（「お待ちください」画面）</span>
-        </button>
+          <!-- 10分前待機画面（視聴チャンネル1のみ） -->
+          <div id="standby-overlay" class="hidden absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
+            <p class="text-lg md:text-2xl font-bold text-white tracking-wide">
+              配信が開始されるまでお待ちください
+            </p>
+            <div id="standby-countdown" class="mt-3 text-2xl md:text-4xl font-mono font-black text-zinc-300 tabular-nums"></div>
+          </div>
+        </div>
 
-        <!-- Mode 3: 15 Seconds Before Live (Auto Transition Test) -->
-        <button
-          id="sim-btn-countdown15"
-          onclick="setLiveFrameScenario('COUNTDOWN_15S')"
-          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-          title="15秒間「お待ちください」を表示した後、自動的に本番ライブ映像へ切り替わります"
-        >
-          <i class="fa-solid fa-stopwatch text-pink-400"></i>
-          <span>③ 15秒後に配信開始（待機→ライブ自動遷移テスト）</span>
-        </button>
-
-        <!-- Mode 4: Active Live Broadcast -->
-        <button
-          id="sim-btn-live"
-          onclick="setLiveFrameScenario('LIVE_NOW')"
-          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-        >
-          <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-          <span>④ 枠あり：本番ライブ配信中（CH1のみライブ再生）</span>
-        </button>
-
-        <!-- Custom Frame Config Modal Trigger -->
-        <button
-          onclick="openCustomLiveModal()"
-          class="px-2.5 py-1.5 rounded-lg font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center gap-1"
-        >
-          <i class="fa-solid fa-sliders text-tv-cyan"></i>
-          <span>枠時刻・ライブID設定</span>
-        </button>
+        <!-- 現在の番組タイトルバー -->
+        <div class="px-4 py-3 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <img id="current-thumb" src="" alt="" class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0 hidden" />
+            <div id="current-title" class="text-sm font-bold text-zinc-100 truncate"></div>
+          </div>
+          <div id="current-time-range" class="text-xs font-mono text-zinc-400 shrink-0 tabular-nums"></div>
+        </div>
       </div>
 
-      <!-- Active Shield & Sync Badge -->
-      <div class="flex items-center gap-3 ml-auto">
-        <div class="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/50 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
-          <i class="fa-solid fa-shield-halved"></i>
-          <span>UI非表示 & Ad-Guard 広告ブロック稼働中</span>
+      <!-- YouTubeチャット領域（視聴チャンネル1のみ表示） -->
+      <div id="chat-column" class="lg:col-span-3 h-full">
+        <div class="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden h-[360px] lg:h-[calc((100vw-32px)*0.75*9/16+49px)] max-h-[680px]">
+          <iframe
+            id="yt-chat-frame"
+            class="w-full h-full border-0"
+            src="about:blank"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          ></iframe>
         </div>
       </div>
 
     </div>
-  </div>
 
-  <!-- ==================== MAIN CONTENT AREA ==================== -->
-  <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 flex flex-col gap-6">
-
-    <!-- TOP GRID: PLAYER + SIDE PANEL (CHAT FOR CH1 / INFO FOR CH2) -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-
-      <!-- LEFT/CENTER: MAIN TV PLAYER COLUMN (8 cols on lg, or 12 if chat hidden) -->
-      <div id="player-column" class="lg:col-span-8 flex flex-col gap-3">
-        
-        <!-- TV Screen Frame -->
-        <div id="tv-frame-container" class="relative rounded-2xl p-1 bg-gradient-to-b from-slate-700/40 via-slate-800/30 to-slate-900/50 shadow-2xl">
-          <div class="relative bg-black rounded-xl overflow-hidden">
-
-            <!-- Clean Cropped YouTube Viewport (No YouTube UI Visible) -->
-            <div class="yt-clean-viewport" id="video-viewport">
-              <div class="yt-crop-inner">
-                <div id="yt-player"></div>
-              </div>
-
-              <!-- Transparent Click-Blocker & Custom TV OSD (On-Screen Display) -->
-              <div
-                id="player-shield"
-                onclick="handleScreenTap()"
-                class="absolute inset-0 z-10 flex flex-col justify-between p-3 sm:p-5 bg-gradient-to-t from-black/75 via-transparent to-black/50 opacity-0 hover:opacity-100 transition-opacity duration-300 cursor-pointer"
-              >
-                <!-- Top OSD Bar -->
-                <div class="flex items-start justify-between gap-2 pointer-events-none">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span id="osd-ch-badge" class="px-2.5 py-1 rounded-md text-xs font-black bg-tv-orange text-white shadow">
-                      CH1 : MAIN
-                    </span>
-                    <span id="osd-mode-badge" class="px-2.5 py-1 rounded-md text-xs font-bold bg-black/70 text-slate-200 border border-white/15 backdrop-blur-md">
-                      全端末同期ランダム放送中
-                    </span>
-                    <!-- Catch-up Speed Indicator Badge -->
-                    <span
-                      id="osd-speed-badge"
-                      class="hidden px-2.5 py-1 rounded-md text-xs font-black bg-amber-500 text-black shadow-lg animate-pulse"
-                    >
-                      ⚡ 遅延追いつき倍速中 (1.5x)
-                    </span>
-                  </div>
-
-                  <div class="px-2.5 py-1 rounded-md bg-black/70 border border-white/10 text-[11px] font-mono text-slate-300 backdrop-blur-md">
-                    TAKANEKO.TV CLEAN-FEED
-                  </div>
-                </div>
-
-                <!-- Bottom OSD Info -->
-                <div class="flex items-end justify-between gap-4 pointer-events-none">
-                  <div class="max-w-2xl">
-                    <div class="text-[11px] font-bold text-tv-cyan uppercase tracking-wider mb-0.5" id="osd-time-slot">
-                      ON AIR PROGRAM
-                    </div>
-                    <h2 id="osd-video-title" class="text-sm sm:text-lg font-extrabold text-white line-clamp-1 drop-shadow">
-                      番組データを同期中...
-                    </h2>
-                  </div>
-                  <div class="text-right font-mono text-xs text-slate-300 bg-black/70 px-2.5 py-1 rounded-lg border border-white/10">
-                    <span id="osd-elapsed">00:00</span> / <span id="osd-duration">00:00</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Always-Visible Floating Live / Speed / Sync Status Pill (Top-Left) -->
-              <div class="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
-                <div id="live-pill-indicator" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 border border-white/15 backdrop-blur-md text-[11px] font-bold text-white shadow">
-                  <span id="live-pill-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span id="live-pill-text">CH1 同期再生中</span>
-                </div>
-
-                <!-- Dynamic Catch-Up Active Banner (Visible immediately when lagging 2.5s~30s) -->
-                <div
-                  id="catchup-active-banner"
-                  class="hidden items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-black font-black text-xs shadow-lg shadow-amber-500/30 animate-bounce"
-                >
-                  <i class="fa-solid fa-forward-fast"></i>
-                  <span id="catchup-banner-text">遅延追いつき中 1.5x倍速 (遅れ: +12.4秒)</span>
-                </div>
-              </div>
-
-              <!-- Notification Toast Inside Player (e.g., >30s instant skip notification) -->
-              <div
-                id="player-toast"
-                class="hidden absolute top-14 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl bg-slate-900/95 border border-tv-cyan/50 text-tv-cyan text-xs sm:text-sm font-bold shadow-2xl flex items-center gap-2 backdrop-blur-md"
-              >
-                <i class="fa-solid fa-bolt text-amber-400"></i>
-                <span id="player-toast-text">30秒以上の遅延を検知したため、最新ライブ位置へスキップしました</span>
-              </div>
-
-              <!-- Unmute Prompt Button (Browser Autoplay Policy Helper) -->
-              <button
-                id="unmute-overlay-btn"
-                onclick="unmuteFromOverlay(event)"
-                class="hidden absolute bottom-4 right-4 z-30 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-tv-orange hover:bg-orange-500 text-white font-black text-xs sm:text-sm shadow-xl shadow-tv-orange/40 transition transform hover:scale-105"
-              >
-                <i class="fa-solid fa-volume-xmark text-base animate-pulse"></i>
-                <span>クリックして音声をONにする</span>
-              </button>
-
-              <!-- ==================== 10-MINUTE PRE-STREAM STANDBY OVERLAY (CH1 ONLY) ==================== -->
-              <div
-                id="standby-overlay"
-                class="hidden absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-8 text-center scanline-overlay"
-              >
-                <!-- Decorative Background Glow -->
-                <div class="absolute inset-0 bg-gradient-to-br from-tv-orange/15 via-slate-950 to-pink-600/15 pointer-events-none"></div>
-                
-                <div class="relative z-10 max-w-xl w-full flex flex-col items-center">
-                  <!-- Animated Radar Cat Icon -->
-                  <div class="relative radar-circle w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-tv-orange to-pink-600 flex items-center justify-center shadow-2xl shadow-tv-orange/40 mb-4">
-                    <i class="fa-solid fa-tower-broadcast text-white text-2xl sm:text-3xl animate-pulse"></i>
-                  </div>
-
-                  <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold mb-3">
-                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-                    <span>たかねこちゃんねる 生配信枠 開始10分前待機モード（疑似ライブ一時中止）</span>
-                  </div>
-
-                  <!-- Main Required Standby Message -->
-                  <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-tight mb-2 drop-shadow">
-                    配信が開始されるまでお待ちください
-                  </h2>
-                  <p class="text-xs sm:text-sm text-slate-300 mb-5">
-                    まもなく「たかねこちゃんねる」にて生配信がスタートします。開始時刻になると自動的にライブ映像へ切り替わります。
-                  </p>
-
-                  <!-- Scheduled Stream Card -->
-                  <div class="w-full glass-card rounded-2xl p-4 border border-slate-700/80 mb-5 text-left flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                      <img
-                        id="standby-thumb"
-                        src="https://i.ytimg.com/vi/lKQKSVgymHA/hqdefault.jpg"
-                        onerror="this.src='https://placehold.co/320x180/1e293b/ff6b2b?text=TAKANEKO+LIVE'"
-                        alt="Live Thumbnail"
-                        class="w-24 h-14 object-cover rounded-lg border border-slate-600 shrink-0"
-                      />
-                      <div>
-                        <div class="text-[11px] font-bold text-tv-orange flex items-center gap-1.5">
-                          <i class="fa-solid fa-calendar-check"></i>
-                          <span id="standby-start-time-label">開始予定: --:--</span>
-                        </div>
-                        <div id="standby-stream-title" class="text-sm sm:text-base font-bold text-white line-clamp-1">
-                          【たかねこちゃんねる】特別生配信枠
-                        </div>
-                        <div class="text-[11px] text-slate-400">
-                          ※動画のみを見続けたい場合は上部の「視聴チャンネル2」へお切り替えください
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Countdown Box -->
-                    <div class="bg-slate-950/90 border border-tv-orange/40 px-4 py-2.5 rounded-xl text-center shrink-0 min-w-[140px]">
-                      <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">放送開始まで残り</div>
-                      <div id="standby-countdown" class="font-mono text-xl sm:text-2xl font-black text-tv-orange tracking-wider">
-                        09:45
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Quick Action Buttons inside Standby Screen -->
-                  <div class="flex flex-wrap items-center justify-center gap-3">
-                    <button
-                      onclick="setLiveFrameScenario('LIVE_NOW')"
-                      class="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-tv-orange hover:from-red-500 hover:to-orange-500 text-white text-xs font-bold shadow-lg transition flex items-center gap-1.5"
-                    >
-                      <i class="fa-solid fa-play"></i>
-                      <span>今すぐ本番ライブ開始状態をテスト</span>
-                    </button>
-                    <button
-                      onclick="switchChannel(2)"
-                      class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition flex items-center gap-1.5"
-                    >
-                      <i class="fa-solid fa-tv"></i>
-                      <span>視聴チャンネル2（24H動画放送中）を見る</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- Live Progress Bar (Bottom Edge of Video) -->
-            <div class="w-full h-1.5 bg-slate-900 overflow-hidden">
-              <div
-                id="live-progress-bar"
-                class="h-full bg-gradient-to-r from-tv-orange via-pink-500 to-tv-cyan transition-all duration-300"
-                style="width: 0%"
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- CUSTOM TV CONTROL BAR & LIVE DELAY CATCH-UP TEST PANEL -->
-        <div class="glass-panel rounded-2xl p-3 sm:p-4 flex flex-col gap-3">
-          
-          <!-- Row 1: Main Player Controls + Current Program Info -->
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            
-            <!-- Left: Audio Controls & Sync Status -->
-            <div class="flex items-center gap-3">
-              <button
-                id="btn-mute-toggle"
-                onclick="toggleMute()"
-                class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-white transition"
-                title="ミュート切替"
-              >
-                <i id="icon-volume" class="fa-solid fa-volume-high text-tv-orange"></i>
-              </button>
-
-              <div class="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800">
-                <input
-                  id="volume-slider"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value="80"
-                  oninput="handleVolumeChange(this.value)"
-                  class="w-20 sm:w-24 accent-tv-orange cursor-pointer h-1.5 bg-slate-700 rounded-lg"
-                />
-                <span id="volume-label" class="font-mono text-xs text-slate-300 w-8 text-right">80%</span>
-              </div>
-
-              <!-- Resync to Live Edge Button -->
-              <button
-                onclick="forceSyncToLiveEdge()"
-                class="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-1.5 transition"
-                title="現在の全端末同期位置（最新ライブ位置）へ即座に同期します"
-              >
-                <i class="fa-solid fa-rotate text-tv-cyan"></i>
-                <span>最新ライブ位置へ同期</span>
-              </button>
-            </div>
-
-            <!-- Center: Telemetry (Lag / Playback Rate / Seed Sync) -->
-            <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
-              <div class="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5">
-                <span class="text-slate-400">再生速度:</span>
-                <span id="telemetry-rate" class="font-bold text-emerald-400">1.0x (等倍)</span>
-              </div>
-              <div class="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5">
-                <span class="text-slate-400">ライブ遅延:</span>
-                <span id="telemetry-lag" class="font-bold text-tv-cyan">0.2秒</span>
-              </div>
-            </div>
-
-            <!-- Right: Chat Toggle (CH1 Only) & Fullscreen -->
-            <div class="flex items-center gap-2">
-              <button
-                id="btn-toggle-chat"
-                onclick="toggleChatPanel()"
-                class="px-3 py-2 rounded-xl bg-tv-orange/20 hover:bg-tv-orange/30 border border-tv-orange/40 text-tv-orange text-xs font-bold flex items-center gap-1.5 transition"
-              >
-                <i class="fa-regular fa-comments"></i>
-                <span id="toggle-chat-label">チャット表示中</span>
-              </button>
-
-              <button
-                onclick="toggleFullscreen()"
-                class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-200 transition"
-                title="フルスクリーン表示"
-              >
-                <i class="fa-solid fa-expand"></i>
-              </button>
-            </div>
-
-          </div>
-
-          <!-- Row 2: Live Delay Catch-Up Verification Tools (1.5x Speedup vs >=30s Instant Skip) -->
-          <div class="pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div class="flex items-center gap-2 text-slate-300">
-              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold text-[11px]">
-                自動追いつき制御エンジン稼働中
-              </span>
-              <span class="text-[11px] text-slate-400 hidden sm:inline">
-                遅れ2.5秒〜30秒未満＝<strong class="text-amber-300">自動で倍速(1.5x)追いつき</strong> ／ 30秒以上遅れ＝<strong class="text-tv-cyan">自動で最新ライブ位置へスキップ</strong>
-              </span>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-              <button
-                onclick="simulateDelay(15)"
-                class="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold transition flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-gauge-high"></i>
-                <span>🧪 遅延テスト: +15秒遅らせる（倍速追いつき確認）</span>
-              </button>
-
-              <button
-                onclick="simulateDelay(35)"
-                class="px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 font-bold transition flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-forward-step"></i>
-                <span>🚀 遅延テスト: +35秒遅らせる（30秒以上・即スキップ確認）</span>
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Now Playing Detailed Banner Card -->
-        <div class="glass-panel rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-3.5">
-            <img
-              id="now-playing-thumb"
-              src="https://i.ytimg.com/vi/TSICl37hWyo/hqdefault.jpg"
-              onerror="this.src='https://placehold.co/320x180/1e293b/ff6b2b?text=TAKANEKO.TV'"
-              alt="Current Program"
-              class="w-24 sm:w-28 h-14 sm:h-16 object-cover rounded-xl border border-slate-700 shrink-0"
-            />
-            <div>
-              <div class="flex flex-wrap items-center gap-2 mb-1">
-                <span id="now-playing-ch-tag" class="px-2 py-0.5 text-[10px] font-black rounded bg-tv-orange text-white">
-                  視聴チャンネル1
-                </span>
-                <span id="now-playing-time-range" class="font-mono text-xs text-tv-cyan font-bold">
-                  --:-- - --:--
-                </span>
-                <span id="now-playing-seed-tag" class="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                  SYNC SEED: #CH1
-                </span>
-              </div>
-              <h1 id="now-playing-title" class="text-sm sm:text-base font-extrabold text-white line-clamp-1">
-                番組を読み込み中...
-              </h1>
-              <p id="now-playing-desc" class="text-xs text-slate-400 mt-0.5">
-                全デバイス共通のシード乱数スケジュールにより、どの端末から開いても同じ動画・同じ秒数が同期再生されます。
-              </p>
-            </div>
-          </div>
-
-          <!-- Next Program Preview Pill -->
-          <div class="w-full sm:w-auto sm:max-w-xs bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 shrink-0">
-            <div class="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between gap-2 mb-0.5">
-              <span>NEXT PROGRAM (次枠)</span>
-              <span id="next-playing-time" class="font-mono text-amber-400">--:--~</span>
-            </div>
-            <div id="next-playing-title" class="text-xs font-bold text-slate-200 truncate">
-              次の番組を計算中...
-            </div>
-          </div>
-        </div>
-
+    <!-- 番組表（3日間・リアルなテレビ番組表スタイル） -->
+    <section class="flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+      <!-- 日付タブ（3日間） -->
+      <div class="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
+        <div id="epg-day-tabs" class="flex items-center gap-1"></div>
+        <button onclick="scrollToCurrentTime()" class="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition">
+          現在時刻
+        </button>
       </div>
 
-      <!-- RIGHT: SIDEBAR COLUMN (4 cols on lg) - LIVE CHAT FOR CH1 / VIDEO INFO FOR CH2 -->
-      <div id="sidebar-column" class="lg:col-span-4 flex flex-col h-[560px] lg:h-[640px]">
-
-        <!-- ==================== CHANNEL 1 EXCLUSIVE LIVE CHAT PANEL ==================== -->
-        <div id="ch1-chat-container" class="glass-panel rounded-2xl flex flex-col h-full overflow-hidden border border-slate-800">
-          
-          <!-- Chat Panel Header -->
-          <div class="p-3 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <h3 class="text-xs sm:text-sm font-black text-white">
-                視聴チャンネル1 ライブチャット
-              </h3>
-              <span class="px-1.5 py-0.5 text-[10px] font-bold bg-tv-orange/20 text-tv-orange border border-tv-orange/30 rounded">
-                CH1限定
-              </span>
-            </div>
-
-            <div class="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
-              <i class="fa-solid fa-users text-tv-cyan"></i>
-              <span id="chat-viewer-count">1,428</span>
-            </div>
-          </div>
-
-          <!-- Chat Mode Switch Tabs (Simulated Realtime Chat vs Native YouTube Live Chat Iframe) -->
-          <div class="grid grid-cols-2 bg-slate-950 p-1 border-b border-slate-800 text-xs font-bold">
-            <button
-              id="chat-tab-party"
-              onclick="switchChatTab('PARTY')"
-              class="py-1.5 rounded-lg bg-slate-800 text-white transition flex items-center justify-center gap-1.5"
-            >
-              <i class="fa-solid fa-bolt text-tv-orange"></i>
-              <span>TAKANEKO実況チャット</span>
-            </button>
-            <button
-              id="chat-tab-yt"
-              onclick="switchChatTab('YOUTUBE')"
-              class="py-1.5 rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5"
-            >
-              <i class="fa-brands fa-youtube text-red-500"></i>
-              <span>YouTubeライブチャット</span>
-            </button>
-          </div>
-
-          <!-- TAB 1: TAKANEKO.TV Interactive Live Chat Stream -->
-          <div id="chat-view-party" class="flex-1 flex flex-col min-h-0">
-            <!-- Messages Scroll List -->
-            <div id="chat-messages-box" class="flex-1 overflow-y-auto p-3 space-y-2.5 text-xs">
-              <!-- Populated dynamically -->
-            </div>
-
-            <!-- Quick Stamp / Reaction Bar -->
-            <div class="px-3 py-1.5 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-between gap-1">
-              <span class="text-[10px] text-slate-400 font-semibold">スタンプ:</span>
-              <div class="flex items-center gap-1">
-                <button onclick="sendQuickChat('🐱たかねこ最高！！')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] transition">🐱最高</button>
-                <button onclick="sendQuickChat('😂😂😂草')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] transition">😂草</button>
-                <button onclick="sendQuickChat('🍣寿司食べないと！')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] transition">🍣寿司</button>
-                <button onclick="sendQuickChat('👏👏👏888888')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] transition">👏888</button>
-                <button onclick="sendQuickChat('🔥待機中ワクワク！')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] transition">🔥待機</button>
-              </div>
-            </div>
-
-            <!-- Chat Input Form -->
-            <form onsubmit="handleChatSubmit(event)" class="p-2.5 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
-              <input
-                id="chat-input"
-                type="text"
-                placeholder="CH1の実況コメントを入力..."
-                maxlength="120"
-                class="flex-1 bg-slate-900 border border-slate-700 focus:border-tv-orange rounded-xl px-3 py-2 text-xs text-white outline-none transition"
-              />
-              <button
-                type="submit"
-                class="px-3.5 py-2 rounded-xl bg-tv-orange hover:bg-orange-500 text-white font-bold text-xs transition shrink-0"
-              >
-                送信
-              </button>
-            </form>
-          </div>
-
-          <!-- TAB 2: Official YouTube Live Chat Embed -->
-          <div id="chat-view-yt" class="hidden flex-1 flex-col min-h-0 bg-slate-950">
-            <div class="p-2.5 bg-slate-900/90 border-b border-slate-800 text-[11px] text-slate-300 flex items-center justify-between gap-2">
-              <span>対象ライブID: <strong id="yt-chat-video-id" class="font-mono text-tv-cyan">lKQKSVgymHA</strong></span>
-              <a
-                id="yt-chat-popout-link"
-                href="https://www.youtube.com/live_chat?v=lKQKSVgymHA"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-tv-orange hover:underline font-bold flex items-center gap-1"
-              >
-                <span>別窓で開く</span>
-                <i class="fa-solid fa-up-right-from-square text-[10px]"></i>
-              </a>
-            </div>
-            <div class="flex-1 relative">
-              <iframe
-                id="yt-live-chat-iframe"
-                class="w-full h-full border-0"
-                src=""
-              ></iframe>
-            </div>
-          </div>
-
+      <!-- 番組表本体 -->
+      <div id="epg-scroll" class="epg-scroll-container">
+        <div class="epg-header-row">
+          <div class="py-2 text-center text-[11px] font-bold text-zinc-500 border-r border-zinc-800">時刻</div>
+          <div class="py-2 px-3 text-xs font-bold text-white border-r border-zinc-800">視聴チャンネル1</div>
+          <div class="py-2 px-3 text-xs font-bold text-white">視聴チャンネル2</div>
         </div>
 
-        <!-- ==================== CHANNEL 2 EXCLUSIVE SIDE PANEL (CHAT HIDDEN BY SPEC) ==================== -->
-        <div id="ch2-info-container" class="hidden glass-panel rounded-2xl flex-col h-full overflow-hidden border border-cyan-500/30 p-4 justify-between">
-          <div>
-            <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-800">
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-black">
-                  CH2 仕様
-                </span>
-                <h3 class="text-sm font-black text-white">24時間 動画専門チャンネル</h3>
-              </div>
-              <span class="text-[11px] text-slate-400 font-mono">CHAT OFF</span>
-            </div>
-
-            <!-- Notice Card Explaining CH2 Behavior -->
-            <div class="bg-cyan-950/30 border border-cyan-500/30 rounded-xl p-3.5 mb-4">
-              <div class="flex items-center gap-2 text-cyan-300 font-bold text-xs mb-1.5">
-                <i class="fa-solid fa-circle-info"></i>
-                <span>視聴チャンネル2の放送ルール</span>
-              </div>
-              <ul class="text-xs text-slate-300 space-y-1.5 list-disc list-inside leading-relaxed">
-                <li>たかねこちゃんねるで<strong>生配信枠が立っている時（10分前待機や本番ライブ中）でも、CH2では中断せず動画のみ</strong>が流れ続けます。</li>
-                <li>全デバイス共通のシード付き乱数（CH2専用シード）により、全端末で同じ再生順・同じ秒数が共有されます。</li>
-                <li>仕様により、<strong>ライブチャットは視聴チャンネル1のみ</strong>に表示されます。</li>
-              </ul>
-            </div>
-
-            <!-- Upcoming Video Queue on CH2 -->
-            <div class="mb-2 flex items-center justify-between">
-              <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                <i class="fa-solid fa-list-ol text-tv-cyan mr-1"></i>
-                CH2 今後の放送予定ラインナップ
-              </h4>
-              <span class="text-[10px] font-mono text-slate-400">全端末共通シャッフル</span>
-            </div>
-
-            <div id="ch2-upcoming-list" class="space-y-2 overflow-y-auto max-h-[270px] pr-1">
-              <!-- Populated by JS -->
-            </div>
-          </div>
-
-          <button
-            onclick="switchChannel(1)"
-            class="w-full py-2.5 rounded-xl bg-gradient-to-r from-tv-orange to-pink-600 text-white font-bold text-xs shadow-lg transition flex items-center justify-center gap-2"
-          >
-            <i class="fa-solid fa-comments"></i>
-            <span>ライブ連動＆チャット付きの「視聴チャンネル1」へ移動</span>
-          </button>
-        </div>
-
-      </div>
-
-    </div>
-
-    <!-- ==================== ELECTRONIC PROGRAM GUIDE (EPG) SECTION ==================== -->
-    <section class="glass-panel rounded-2xl p-4 sm:p-6 border border-slate-800">
-      
-      <!-- EPG Header -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-800">
-        <div>
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-tv-orange/20 border border-tv-orange/40 flex items-center justify-center text-tv-orange">
-              <i class="fa-solid fa-calendar-days"></i>
-            </div>
-            <h2 class="text-base sm:text-xl font-black text-white tracking-tight">
-              リアルタイム番組表 (EPG) — 全デバイス時刻同期編成
-            </h2>
-          </div>
-          <p class="text-xs text-slate-400 mt-1">
-            たかねこちゃんねるで配信枠が立つと、<strong class="text-tv-orange">視聴チャンネル1の番組表のみ自動的に「10分前待機枠」＆「本番ライブ枠」へ変化</strong>します（視聴チャンネル2は動画放送を継続）。
-          </p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2 text-xs">
-          <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 font-mono text-slate-300">
-            同期アルゴリズム: <strong class="text-tv-cyan">Mulberry32 + Fisher-Yates</strong>
-          </span>
+        <div id="epg-grid" class="epg-body-grid">
+          <div id="epg-time-col" class="epg-time-axis"></div>
+          <div id="epg-ch1-col" class="epg-channel-col"></div>
+          <div id="epg-ch2-col" class="epg-channel-col"></div>
+          <div id="epg-now-bar" class="epg-now-line hidden"></div>
         </div>
       </div>
-
-      <!-- 2-Column Simultaneous EPG Grid (Channel 1 & Channel 2) -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        <!-- EPG Column 1: 視聴チャンネル1 -->
-        <div class="flex flex-col bg-slate-950/60 rounded-2xl border border-slate-800 overflow-hidden">
-          <div class="p-3.5 bg-gradient-to-r from-tv-orange/20 via-pink-600/10 to-transparent border-b border-slate-800 flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-              <span class="px-2 py-0.5 rounded bg-tv-orange text-white font-mono text-xs font-black">CH1</span>
-              <div>
-                <h3 class="text-sm font-black text-white">視聴チャンネル1 番組表</h3>
-                <p class="text-[11px] text-slate-400">通常時：ランダム動画 ／ 配信枠あり時：10分前待機＆生配信連動</p>
-              </div>
-            </div>
-            <span id="epg-ch1-status-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              動画放送中
-            </span>
-          </div>
-
-          <div id="epg-list-ch1" class="p-3 space-y-2.5 max-h-[460px] overflow-y-auto">
-            <!-- Dynamically rendered CH1 schedule items -->
-          </div>
-        </div>
-
-        <!-- EPG Column 2: 視聴チャンネル2 -->
-        <div class="flex flex-col bg-slate-950/60 rounded-2xl border border-slate-800 overflow-hidden">
-          <div class="p-3.5 bg-gradient-to-r from-cyan-500/20 via-blue-600/10 to-transparent border-b border-slate-800 flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-              <span class="px-2 py-0.5 rounded bg-cyan-500 text-slate-950 font-mono text-xs font-black">CH2</span>
-              <div>
-                <h3 class="text-sm font-black text-white">視聴チャンネル2 番組表</h3>
-                <p class="text-[11px] text-slate-400">24時間ノンストップ動画専門（生配信中も動画のみを放送）</p>
-              </div>
-            </div>
-            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-              24H 動画専門
-            </span>
-          </div>
-
-          <div id="epg-list-ch2" class="p-3 space-y-2.5 max-h-[460px] overflow-y-auto">
-            <!-- Dynamically rendered CH2 schedule items -->
-          </div>
-        </div>
-
-      </div>
-
     </section>
-
   </main>
 
-  <!-- ==================== FOOTER ==================== -->
-  <footer class="border-t border-slate-800/80 bg-slate-950/80 py-4 px-4 sm:px-6 text-xs text-slate-400">
-    <div class="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-      <div class="flex items-center gap-2">
-        <span class="font-black text-white">TAKANEKO.TV</span>
-        <span>— Unofficial Fan Broadcast Station for たかねこちゃんねる (@takaneko_ch)</span>
-      </div>
-      <div class="flex items-center gap-4">
-        <span>Deterministic Seed Sync v2.6</span>
-        <span>No-UI / No-Cookie Ad-Guard Embedded</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- ==================== MODAL 1: CUSTOM LIVE FRAME SETTINGS ==================== -->
-  <div id="modal-live-config" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel rounded-2xl max-w-lg w-full p-5 sm:p-6 border border-slate-700 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-        <h3 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
-          <i class="fa-solid fa-satellite-dish text-tv-orange"></i>
-          <span>たかねこちゃんねる 配信枠（ライブ）予約・設定</span>
-        </h3>
-        <button onclick="closeCustomLiveModal()" class="text-slate-400 hover:text-white text-lg">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <form onsubmit="saveCustomLiveConfig(event)" class="space-y-4 text-xs sm:text-sm">
-        <div>
-          <label class="block text-xs font-bold text-slate-300 mb-1">
-            本番ライブのYouTube動画ID または URL（たかねこちゃんねる生配信枠）
-          </label>
-          <input
-            id="input-live-id"
-            type="text"
-            value="lKQKSVgymHA"
-            placeholder="例: lKQKSVgymHA または https://www.youtube.com/watch?v=..."
-            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-tv-orange"
-            required
-          />
-          <p class="text-[11px] text-slate-400 mt-1">
-            デフォルト: <code class="text-tv-cyan">lKQKSVgymHA</code>（たかねこちゃんねる「まだ仕組みが分かってない2人が『超かぐや姫！』同時視聴！」配信枠）
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-300 mb-1">
-            ライブ配信タイトル（番組表・待機画面に表示）
-          </label>
-          <input
-            id="input-live-title"
-            type="text"
-            value="【生配信】まだ仕組みが分かってない2人が「超かぐや姫！」同時視聴！【たかねこちゃんねる】"
-            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-tv-orange"
-            required
-          />
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1">
-              配信開始予定（現在から何分後か）
-            </label>
-            <input
-              id="input-live-offset-min"
-              type="number"
-              step="1"
-              min="-60"
-              max="120"
-              value="8"
-              class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-tv-orange"
-            />
-            <p class="text-[10px] text-slate-400 mt-1">
-              ※1〜10分を設定すると即座に「開始10分前待機画面」になります。0以下で「現在ライブ配信中」になります。
-            </p>
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-300 mb-1">
-              予定配信枠の長さ（分）
-            </label>
-            <input
-              id="input-live-duration-min"
-              type="number"
-              min="15"
-              max="240"
-              value="60"
-              class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-tv-orange"
-            />
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-          <button
-            type="button"
-            onclick="closeCustomLiveModal()"
-            class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
-          >
-            キャンセル
-          </button>
-          <button
-            type="submit"
-            class="px-4 py-2 rounded-xl bg-tv-orange hover:bg-orange-500 text-white font-bold text-xs shadow-lg"
-          >
-            この設定でライブ枠を反映
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL 2: VIDEO POOL MANAGER ==================== -->
-  <div id="modal-video-manager" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel rounded-2xl max-w-2xl w-full p-5 sm:p-6 border border-slate-700 shadow-2xl max-h-[90vh] flex flex-col">
-      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-        <div>
-          <h3 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <i class="fa-solid fa-film text-tv-cyan"></i>
-            <span>たかねこちゃんねる 放送動画リスト管理（配信アーカイブ除外・動画のみ）</span>
-          </h3>
-          <p class="text-xs text-slate-400">
-            登録された動画リストから、全端末共通のシード乱数で24時間の番組表が自動編成されます。
-          </p>
-        </div>
-        <button onclick="closeVideoModal()" class="text-slate-400 hover:text-white text-lg">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <!-- Add New Video Form -->
-      <form onsubmit="handleAddVideo(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-4 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs">
-        <input
-          id="new-video-id"
-          type="text"
-          placeholder="YouTube動画URLまたはID"
-          class="sm:col-span-4 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono outline-none focus:border-tv-cyan"
-          required
-        />
-        <input
-          id="new-video-title"
-          type="text"
-          placeholder="動画タイトル"
-          class="sm:col-span-5 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white outline-none focus:border-tv-cyan"
-          required
-        />
-        <input
-          id="new-video-duration"
-          type="number"
-          min="30"
-          max="7200"
-          placeholder="秒数(例:600)"
-          value="600"
-          class="sm:col-span-2 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono outline-none focus:border-tv-cyan"
-          required
-        />
-        <button
-          type="submit"
-          class="sm:col-span-1 bg-tv-cyan hover:bg-cyan-400 text-slate-950 font-black rounded-lg py-2 transition"
-        >
-          追加
-        </button>
-      </form>
-
-      <!-- Current Video List -->
-      <div id="manager-video-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
-        <!-- Populated by JS -->
-      </div>
-
-      <div class="flex items-center justify-between pt-3 mt-4 border-t border-slate-800 text-xs">
-        <button
-          onclick="resetDefaultVideos()"
-          class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-        >
-          初期データにリセット
-        </button>
-        <button
-          onclick="closeVideoModal()"
-          class="px-4 py-2 rounded-xl bg-tv-orange text-white font-bold"
-        >
-          閉じる
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== APPLICATION SCRIPT ==================== -->
+  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
-    /*************************************************************************
-     * 1. INITIAL VIDEO POOL (たかねこちゃんねる Videos Only - Streams Excluded)
-     *************************************************************************/
-    const DEFAULT_VIDEOS = [
-      {
-        id: 'TSICl37hWyo',
-        title: '【バカゲー🍣】そろそろ寿司を食べないと死ぬぜユニバース実況【魚嫌い🐟】',
-        duration: 1229
-      },
-      {
-        id: 'vv-o13YKrJc',
-        title: '【切り抜き】おもてなしカメレオンに爆笑するたかねこ【めっちゃカメレオン】',
-        duration: 180
-      },
-      {
-        id: 'Pt3oGNBTwjY',
-        title: '【妹に運転を教える】Little Sister 実況プレイ',
-        duration: 720
-      },
-      {
-        id: 'UsDZmpYOMq4',
-        title: '【Dandelions Endure】のんびりゲーかと思ったら即死音ゲーだった件',
-        duration: 660
-      },
-      {
-        id: 'MUoFtKQoNXs',
-        title: '【ヒューマンフォールフラット⁉️】レスキュー隊員になるゲーム🚒【SOS OPS!】',
-        duration: 840
-      },
-      {
-        id: 'F4JNliw_Lvw',
-        title: '【Fairy Carrots】小さな変態になって集めるゲーム🥕【妖精さんのにんじん】',
-        duration: 600
-      }
-    ];
+    const CHANNEL_HANDLE = '@takaneko_ch';
+    const EPOCH_BASE_SEC = Math.floor(new Date('2026-01-01T00:00:00+09:00').getTime() / 1000);
+    const PX_PER_MINUTE = 3; // 1分 = 3px (1時間 = 180px, 24時間 = 4320px)
 
-    let videoPool = [...DEFAULT_VIDEOS];
-    const brokenVideoIds = new Set(); // Tracks any video ID that fails embedding so we smoothly fallback
-
-    /*************************************************************************
-     * 2. DETERMINISTIC CROSS-DEVICE RANDOM SCHEDULE ENGINE
-     * Uses fixed Epoch + Mulberry32 Seeded PRNG + Fisher-Yates Shuffle
-     * Ensures all devices playing CH1 or CH2 see the exact same random order
-     * and the exact same playback timestamp at any moment.
-     *************************************************************************/
-    const SCHEDULE_EPOCH_SEC = Math.floor(Date.parse('2026-01-01T00:00:00Z') / 1000);
-    const CHANNEL_SEEDS = {
-      1: 1049281, // Seed A for Channel 1
-      2: 8837465  // Seed B for Channel 2
+    // 状態管理
+    let videoCatalog = [];
+    let liveStreamInfo = {
+      videoId: null,
+      title: '',
+      startTimeSec: null, // 配信開始予定時刻(UNIX秒)
+      isLiveNow: false
     };
 
-    // Mulberry32 deterministic PRNG
-    function mulberry32(seed) {
-      let a = seed >>> 0;
-      return function() {
-        a |= 0;
-        a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
+    let activeChannel = 1;
+    let selectedDayOffset = 0; // 0: 今日, 1: 明日, 2: 明後日
+    let ytPlayer = null;
+    let playerReady = false;
+    let currentPlayingId = null;
+    let currentChatVideoId = null;
+    let isMuted = false;
+
+    // 1. シード付き乱数（全デバイス共通のランダム順序を生成）
+    function seededRandom(seed) {
+      let t = (seed + 0x6D2B79F5) | 0;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     }
 
-    // Seeded Fisher-Yates shuffle for a given cycle index and channel
-    function getShuffledCycleVideos(channelNum, cycleIndex) {
-      const activePool = videoPool.filter(v => !brokenVideoIds.has(v.id));
-      const list = (activePool.length > 0 ? activePool : videoPool).map(v => ({ ...v }));
-      const combinedSeed = (CHANNEL_SEEDS[channelNum] ^ Math.imul(cycleIndex + 1, 2654435761)) >>> 0;
-      const rand = mulberry32(combinedSeed);
+    function getDeterministicShuffle(list, cycleIndex, channelSalt) {
+      const arr = [...list];
+      let seed = (cycleIndex * 2654435761) ^ (channelSalt * 1597334677);
+      for (let i = arr.length - 1; i > 0; i--) {
+        seed = (seed + 1013904223) | 0;
+        const j = Math.floor(seededRandom(seed) * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
 
-      for (let i = list.length - 1; i > 0; i--) {
-        const j = Math.floor(rand() * (i + 1));
-        const temp = list[i];
-        list[i] = list[j];
-        list[j] = temp;
+    // 2. YouTubeの再生時間文字列("12:34" や "1:05:20")を秒数に変換
+    function parseDurationText(text) {
+      if (!text) return 300;
+      const parts = text.trim().split(':').map(Number);
+      if (parts.some(isNaN)) return 300;
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      return parts[0] || 300;
+    }
+
+    // 3. @takaneko_ch の「動画（Videos）」タブと「ライブ（Streams）」を実際に取得
+    async function fetchTextWithFallback(targetUrl) {
+      const proxies = [
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`
+      ];
+      for (const buildUrl of proxies) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 7000);
+          const res = await fetch(buildUrl(targetUrl), { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const text = await res.text();
+            if (text && text.length > 500) return text;
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function extractYtInitialData(html) {
+      if (!html) return null;
+      const patterns = [
+        /var ytInitialData\s*=\s*(\{.+?\});<\/script>/s,
+        /window\["ytInitialData"\]\s*=\s*(\{.+?\});/s,
+        /ytInitialData\s*=\s*(\{.+?\});<\/script>/s
+      ];
+      for (const regex of patterns) {
+        const match = html.match(regex);
+        if (match && match[1]) {
+          try {
+            return JSON.parse(match[1]);
+          } catch (_) {}
+        }
+      }
+      return null;
+    }
+
+    function collectVideoRenderers(obj, results = []) {
+      if (!obj || typeof obj !== 'object') return results;
+      if (obj.videoRenderer && obj.videoRenderer.videoId) {
+        results.push(obj.videoRenderer);
+        return results;
+      }
+      for (const key of Object.keys(obj)) {
+        collectVideoRenderers(obj[key], results);
+      }
+      return results;
+    }
+
+    async function loadTakanekoVideosAndLiveStatus() {
+      // URLパラメータでのライブ枠指定にも対応 (?live=VIDEO_ID&start=UNIX_SEC)
+      const params = new URLSearchParams(location.search);
+      if (params.get('live')) {
+        liveStreamInfo.videoId = params.get('live');
+        liveStreamInfo.title = params.get('title') || 'たかねこちゃんねる ライブ';
+        liveStreamInfo.startTimeSec = params.get('start')
+          ? Number(params.get('start'))
+          : Math.floor(Date.now() / 1000) - 60;
+        liveStreamInfo.isLiveNow = Math.floor(Date.now() / 1000) >= liveStreamInfo.startTimeSec;
       }
 
-      // Avoid back-to-back repeat across cycle boundaries
-      if (list.length > 1 && cycleIndex > 0) {
-        const prevSeed = (CHANNEL_SEEDS[channelNum] ^ Math.imul(cycleIndex, 2654435761)) >>> 0;
-        const prevRand = mulberry32(prevSeed);
-        const prevList = (activePool.length > 0 ? activePool : videoPool).map(v => v.id);
-        for (let i = prevList.length - 1; i > 0; i--) {
-          const j = Math.floor(prevRand() * (i + 1));
-          [prevList[i], prevList[j]] = [prevList[j], prevList[i]];
-        }
-        const lastOfPrev = prevList[prevList.length - 1];
-        if (list[0].id === lastOfPrev) {
-          [list[0], list[1]] = [list[1], list[0]];
-        }
-      }
+      // 1) @takaneko_ch/videos から配信ではないすべての「動画」を取得
+      const videosHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/videos?hl=ja`);
+      const initialData = extractYtInitialData(videosHtml);
 
-      return list;
-    }
+      if (initialData) {
+        const renderers = collectVideoRenderers(initialData);
+        const parsedVideos = [];
+        const seenIds = new Set();
 
-    function getCycleTotalDuration() {
-      const activePool = videoPool.filter(v => !brokenVideoIds.has(v.id));
-      const list = activePool.length > 0 ? activePool : videoPool;
-      return list.reduce((sum, v) => sum + Number(v.duration || 600), 0);
-    }
+        for (const vr of renderers) {
+          const vid = vr.videoId;
+          if (!vid || seenIds.has(vid)) continue;
 
-    /**
-     * Generates deterministic pseudo-live schedule blocks around `nowSec`
-     */
-    function generateVideoScheduleWindow(channelNum, nowSec, windowPastSec = 900, windowFutureSec = 10800) {
-      const cycleDur = getCycleTotalDuration();
-      if (cycleDur <= 0) return [];
+          // ライブ枠や予定枠が混ざっていたらライブ情報として記録し、動画リストからは除外
+          const isLiveBadge = JSON.stringify(vr.badges || []).includes('LIVE') ||
+                              JSON.stringify(vr.thumbnailOverlays || []).includes('LIVE');
+          if (vr.upcomingEventData || isLiveBadge) {
+            if (vr.upcomingEventData && vr.upcomingEventData.startTime) {
+              liveStreamInfo.videoId = vid;
+              liveStreamInfo.title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || 'ライブ';
+              liveStreamInfo.startTimeSec = Number(vr.upcomingEventData.startTime);
+              liveStreamInfo.isLiveNow = false;
+            } else if (isLiveBadge) {
+              liveStreamInfo.videoId = vid;
+              liveStreamInfo.title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || 'ライブ';
+              liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 300;
+              liveStreamInfo.isLiveNow = true;
+            }
+            continue;
+          }
 
-      const elapsedSinceEpoch = Math.max(0, nowSec - SCHEDULE_EPOCH_SEC);
-      const currentCycleIndex = Math.floor(elapsedSinceEpoch / cycleDur);
-      const startCycleIndex = Math.max(0, currentCycleIndex - 1);
+          const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
+          const lenText = vr.lengthText?.simpleText ||
+                          vr.thumbnailOverlays?.find(o => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
 
-      const blocks = [];
-      let cycleIdx = startCycleIndex;
-
-      while (true) {
-        const cycleStartSec = SCHEDULE_EPOCH_SEC + cycleIdx * cycleDur;
-        if (cycleStartSec > nowSec + windowFutureSec) break;
-
-        const shuffled = getShuffledCycleVideos(channelNum, cycleIdx);
-        let cursor = cycleStartSec;
-
-        for (let i = 0; i < shuffled.length; i++) {
-          const v = shuffled[i];
-          const startSec = cursor;
-          const endSec = cursor + v.duration;
-          cursor = endSec;
-
-          if (endSec >= nowSec - windowPastSec && startSec <= nowSec + windowFutureSec) {
-            blocks.push({
-              type: 'VIDEO',
-              channel: channelNum,
-              videoId: v.id,
-              title: v.title,
-              duration: v.duration,
-              startSec,
-              endSec,
-              cycleIdx
+          if (title && lenText) {
+            seenIds.add(vid);
+            parsedVideos.push({
+              id: vid,
+              title: title,
+              duration: Math.max(30, parseDurationText(lenText)),
+              thumb: `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`
             });
           }
         }
-        cycleIdx++;
+
+        if (parsedVideos.length > 0) {
+          videoCatalog = parsedVideos;
+        }
       }
 
-      return blocks;
+      // 2) @takaneko_ch/streams からライブ予定枠・現在配信枠をチェック
+      const streamsHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
+      const streamsData = extractYtInitialData(streamsHtml);
+      if (streamsData) {
+        const streamRenderers = collectVideoRenderers(streamsData);
+        for (const sr of streamRenderers) {
+          const vid = sr.videoId;
+          const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || 'ライブ';
+          const isLiveBadge = JSON.stringify(sr.badges || []).includes('LIVE') ||
+                              JSON.stringify(sr.thumbnailOverlays || []).includes('LIVE');
+
+          if (isLiveBadge) {
+            liveStreamInfo.videoId = vid;
+            liveStreamInfo.title = title;
+            if (!liveStreamInfo.startTimeSec) {
+              liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 180;
+            }
+            liveStreamInfo.isLiveNow = true;
+            break;
+          } else if (sr.upcomingEventData && sr.upcomingEventData.startTime) {
+            liveStreamInfo.videoId = vid;
+            liveStreamInfo.title = title;
+            liveStreamInfo.startTimeSec = Number(sr.upcomingEventData.startTime);
+            liveStreamInfo.isLiveNow = false;
+            break;
+          }
+        }
+      }
+
+      renderEpgDayTabs();
+      renderEpgGrid();
+      syncPlayback(true);
     }
 
-    /*************************************************************************
-     * 3. LIVE FRAME (たかねこちゃんねる 生配信枠) STATE & EPG MERGER
-     *************************************************************************/
-    let liveFrameConfig = {
-      enabled: false,
-      liveVideoId: 'lKQKSVgymHA',
-      title: '【生配信】まだ仕組みが分かってない2人が「超かぐや姫！」同時視聴！【たかねこちゃんねる】',
-      startSec: 0,
-      endSec: 0
-    };
+    // 4. 指定されたチャンネル・時間範囲の番組スケジュールを算出
+    function getScheduleSlots(channelNum, rangeStartSec, rangeEndSec) {
+      if (videoCatalog.length === 0) return [];
 
-    /**
-     * Returns the effective schedule for `channelNum` at `nowSec`.
-     * For Channel 1: If `liveFrameConfig.enabled` is true, overrides the 10-minute pre-stream window
-     * with a STANDBY block (`startSec - 600` to `startSec`) and the live window (`startSec` to `endSec`) with a LIVE block!
-     * For Channel 2: ALWAYS returns only video blocks even when a live frame is active!
-     */
-    function getChannelScheduleBlocks(channelNum, nowSec) {
-      const videoBlocks = generateVideoScheduleWindow(channelNum, nowSec);
+      const totalCycleDuration = videoCatalog.reduce((acc, v) => acc + v.duration, 0);
+      if (totalCycleDuration <= 0) return [];
 
-      // Channel 2 NEVER switches to live or standby
-      if (channelNum === 2 || !liveFrameConfig.enabled) {
-        return videoBlocks;
-      }
+      const salt = channelNum === 1 ? 101 : 202;
+      const startCycle = Math.floor((rangeStartSec - EPOCH_BASE_SEC) / totalCycleDuration);
+      const endCycle = Math.floor((rangeEndSec - EPOCH_BASE_SEC) / totalCycleDuration) + 1;
 
-      const standbyStart = liveFrameConfig.startSec - 600; // 10 minutes before live
-      const liveStart = liveFrameConfig.startSec;
-      const liveEnd = liveFrameConfig.endSec;
+      const slots = [];
 
-      const merged = [];
+      for (let cycle = startCycle; cycle <= endCycle; cycle++) {
+        const shuffled = getDeterministicShuffle(videoCatalog, cycle, salt);
+        let cursor = EPOCH_BASE_SEC + cycle * totalCycleDuration;
 
-      for (const b of videoBlocks) {
-        // Completely outside the [standbyStart, liveEnd] window
-        if (b.endSec <= standbyStart || b.startSec >= liveEnd) {
-          merged.push(b);
-          continue;
-        }
-        // If a video started before standbyStart, truncate it right at standbyStart
-        if (b.startSec < standbyStart && b.endSec > standbyStart) {
-          merged.push({
-            ...b,
-            endSec: standbyStart,
-            duration: standbyStart - b.startSec
+        for (const video of shuffled) {
+          const slotStart = cursor;
+          const slotEnd = cursor + video.duration;
+          cursor = slotEnd;
+
+          if (slotEnd <= rangeStartSec || slotStart >= rangeEndSec) continue;
+
+          slots.push({
+            type: 'video',
+            id: video.id,
+            title: video.title,
+            thumb: `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`,
+            startSec: slotStart,
+            endSec: slotEnd,
+            duration: video.duration
           });
         }
-        // If a video ends after liveEnd, resume after liveEnd
-        if (b.startSec < liveEnd && b.endSec > liveEnd) {
-          merged.push({
-            ...b,
-            startSec: liveEnd,
-            duration: b.endSec - liveEnd
+      }
+
+      // 視聴チャンネル1でたかねこちゃんねるのライブ枠が立っている場合、10分前待機枠＋ライブ枠を上書き反映
+      if (channelNum === 1 && liveStreamInfo.videoId && liveStreamInfo.startTimeSec) {
+        const waitStart = liveStreamInfo.startTimeSec - 600; // 開始10分前
+        const liveStart = liveStreamInfo.startTimeSec;
+        const liveEnd = liveStreamInfo.startTimeSec + 7200; // 番組表上のライブ枠表示幅(2時間)
+
+        const filtered = [];
+        for (const s of slots) {
+          if (s.endSec <= waitStart || s.startSec >= liveEnd) {
+            filtered.push(s);
+          } else if (s.startSec < waitStart && s.endSec > waitStart) {
+            filtered.push({ ...s, endSec: waitStart });
+          } else if (s.startSec < liveEnd && s.endSec > liveEnd) {
+            filtered.push({ ...s, startSec: liveEnd });
+          }
+        }
+
+        if (liveStart > rangeStartSec && waitStart < rangeEndSec) {
+          filtered.push({
+            type: 'wait',
+            id: liveStreamInfo.videoId,
+            title: '配信が開始されるまでお待ちください',
+            thumb: `https://i.ytimg.com/vi/${liveStreamInfo.videoId}/mqdefault.jpg`,
+            startSec: waitStart,
+            endSec: liveStart,
+            duration: 600
           });
         }
-      }
 
-      // Insert 10-Minute Pre-Stream Standby Block
-      merged.push({
-        type: 'STANDBY',
-        channel: 1,
-        videoId: liveFrameConfig.liveVideoId,
-        title: `【配信待機枠】配信が開始されるまでお待ちください（10分前待機）`,
-        scheduledTitle: liveFrameConfig.title,
-        duration: 600,
-        startSec: standbyStart,
-        endSec: liveStart
-      });
-
-      // Insert Actual Live Broadcast Block
-      merged.push({
-        type: 'LIVE',
-        channel: 1,
-        videoId: liveFrameConfig.liveVideoId,
-        title: `🔴【LIVE】${liveFrameConfig.title}`,
-        duration: liveEnd - liveStart,
-        startSec: liveStart,
-        endSec: liveEnd
-      });
-
-      merged.sort((a, b) => a.startSec - b.startSec);
-      return merged;
-    }
-
-    function getActiveBlockForChannel(channelNum, nowSec) {
-      const blocks = getChannelScheduleBlocks(channelNum, nowSec);
-      for (let i = 0; i < blocks.length; i++) {
-        if (nowSec >= blocks[i].startSec && nowSec < blocks[i].endSec) {
-          return {
-            current: blocks[i],
-            next: blocks[i + 1] || null,
-            all: blocks
-          };
+        if (liveEnd > rangeStartSec && liveStart < rangeEndSec) {
+          filtered.push({
+            type: 'live',
+            id: liveStreamInfo.videoId,
+            title: liveStreamInfo.title,
+            thumb: `https://i.ytimg.com/vi/${liveStreamInfo.videoId}/mqdefault.jpg`,
+            startSec: liveStart,
+            endSec: liveEnd,
+            duration: liveEnd - liveStart
+          });
         }
+
+        filtered.sort((a, b) => a.startSec - b.startSec);
+        return filtered;
       }
-      return { current: blocks[0] || null, next: blocks[1] || null, all: blocks };
+
+      return slots;
     }
 
-    /*************************************************************************
-     * 4. YOUTUBE IFRAME API & AD-GUARD / UI-CONCEALMENT / CATCH-UP ENGINE
-     *************************************************************************/
-    let currentChannel = 1;
-    let ytPlayer = null;
-    let isPlayerReady = false;
-    let loadedVideoId = null;
-    let loadedBlockType = null;
-    let currentPlaybackRate = 1.0;
-    let isChatVisible = true;
-    let activeChatTab = 'PARTY';
-    let lastSkipToastTime = 0;
+    function getCurrentSlot(channelNum, nowSec) {
+      const slots = getScheduleSlots(channelNum, nowSec - 60, nowSec + 60);
+      return slots.find(s => nowSec >= s.startSec && nowSec < s.endSec) || null;
+    }
 
-    // Load YouTube IFrame API asynchronously
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-    window.onYouTubeIframeAPIReady = function() {
-      const nowSec = Date.now() / 1000;
-      const activeInfo = getActiveBlockForChannel(currentChannel, nowSec);
-      const initialVideoId = activeInfo.current ? activeInfo.current.videoId : DEFAULT_VIDEOS[0].id;
-      const initialOffset = activeInfo.current
-        ? Math.max(0, Math.floor(nowSec - activeInfo.current.startSec))
-        : 0;
-
+    // 5. YouTube IFrame Player 初期化（字幕強制オフ・音声デフォルトオン・UI非表示）
+    function onYouTubeIframeAPIReady() {
       ytPlayer = new YT.Player('yt-player', {
-        host: 'https://www.youtube-nocookie.com', // Ad-suppressed privacy-enhanced domain
-        videoId: initialVideoId,
+        host: 'https://www.youtube-nocookie.com',
+        width: '100%',
+        height: '100%',
         playerVars: {
           autoplay: 1,
-          controls: 0,         // Hide native controls
-          disablekb: 1,        // Disable keyboard shortcuts that bring up UI
-          fs: 0,               // Hide fullscreen button
-          iv_load_policy: 3,   // Hide video annotations
-          modestbranding: 1,   // Hide YouTube branding
-          rel: 0,              // Restrict related videos to same channel
-          playsinline: 1,      // Play inline on mobile iOS/Android
-           start: initialOffset,
-          origin: window.location.origin
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          cc_load_policy: 0,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          mute: 0,
+          hl: 'ja'
         },
         events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-          onError: onPlayerError
+          onReady: (e) => {
+            playerReady = true;
+            disableCaptions();
+            e.target.unMute();
+            e.target.setVolume(100);
+            updateAudioIcon();
+            syncPlayback(true);
+          },
+          onStateChange: (e) => {
+            disableCaptions();
+            if (e.data === YT.PlayerState.UNMUTED || e.data === YT.PlayerState.PLAYING) {
+              updateAudioIcon();
+            }
+            if (e.data === YT.PlayerState.PAUSED) {
+              const nowSec = Date.now() / 1000;
+              const slot = getCurrentSlot(activeChannel, nowSec);
+              if (slot && slot.type !== 'wait') {
+                ytPlayer.playVideo();
+              }
+            }
+          },
+          onApiChange: () => {
+            disableCaptions();
+          }
         }
       });
-    };
+    }
 
-    function onPlayerReady(event) {
-      isPlayerReady = true;
-      loadedVideoId = DEFAULT_VIDEOS[0].id;
-
-      // Attempt unmuted playback first; fallback to muted with clean overlay button if blocked by browser autoplay policy
+    // 字幕（CC）の強制オフ処理
+    function disableCaptions() {
+      if (!ytPlayer || !playerReady) return;
       try {
-        event.target.setVolume(80);
-        event.target.playVideo();
-        setTimeout(() => {
-          if (ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
-            const state = ytPlayer.getPlayerState();
-            if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
-              ytPlayer.mute();
-              ytPlayer.playVideo();
-              updateMuteUI(true);
-            } else {
-              updateMuteUI(ytPlayer.isMuted());
-            }
-          }
-        }, 700);
-      } catch (e) {
-        console.warn('Autoplay fallback triggered:', e);
-      }
-
-      syncPlayerWithSchedule(true);
-      updateYouTubeChatEmbed();
+        if (typeof ytPlayer.unloadModule === 'function') {
+          ytPlayer.unloadModule('captions');
+          ytPlayer.unloadModule('cc');
+        }
+        if (typeof ytPlayer.setOption === 'function') {
+          ytPlayer.setOption('captions', 'track', {});
+          ytPlayer.setOption('cc', 'track', {});
+        }
+      } catch (_) {}
     }
 
-    function onPlayerStateChange(event) {
-      if (!isPlayerReady) return;
-
-      // Never allow pausing on a live TV broadcast channel (unless in 10-min standby mode)
-      const nowSec = Date.now() / 1000;
-      const { current } = getActiveBlockForChannel(currentChannel, nowSec);
-
-      if (current && current.type === 'STANDBY') {
-        if (event.data === YT.PlayerState.PLAYING) {
-          ytPlayer.pauseVideo();
+    // 音声コントロール（デフォルトオン＋ブラウザ制限時の自動復帰）
+    function ensureAudioUnmuted() {
+      if (!ytPlayer || !playerReady) return;
+      try {
+        if (ytPlayer.isMuted()) {
+          ytPlayer.unMute();
+          ytPlayer.setVolume(100);
+          isMuted = false;
+          updateAudioIcon();
         }
-        return;
-      }
-
-      if (event.data === YT.PlayerState.PAUSED) {
-        ytPlayer.playVideo();
-      } else if (event.data === YT.PlayerState.ENDED) {
-        // Immediately sync to the next scheduled block
-        syncPlayerWithSchedule(true);
-      }
-    }
-
-    function onPlayerError(event) {
-      console.warn('YouTube Player Error Code:', event.data, 'on video:', loadedVideoId);
-      if (loadedVideoId && loadedBlockType === 'VIDEO') {
-        brokenVideoIds.add(loadedVideoId);
-        showPlayerToast('⚠️ 該当動画が埋め込み制限のため、自動的に次の同期プログラムへ切り替えました');
-        loadedVideoId = null;
-        syncPlayerWithSchedule(true);
-      }
-    }
-
-    /**
-     * Core synchronization & Live Delay Catch-Up Engine
-     * Runs every 500ms to keep the player synced with the deterministic timeline or live stream.
-     */
-    function syncPlayerWithSchedule(forceSeek = false) {
-      const nowMs = Date.now();
-      const nowSec = nowMs / 1000;
-      const { current, next } = getActiveBlockForChannel(currentChannel, nowSec);
-
-      if (!current) return;
-
-      // Update Top & Bottom OSD and Program Cards
-      updateProgramDisplayUI(current, next, nowSec);
-
-      // CASE A: Channel 1 is in 10-Minute Pre-Stream Standby Mode
-      const standbyOverlay = document.getElementById('standby-overlay');
-      if (current.type === 'STANDBY') {
-        standbyOverlay.classList.remove('hidden');
-        updateStandbyOverlayUI(current, nowSec);
-
-        // Stop video playback while in 10-minute standby
-        if (isPlayerReady && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
-          const st = ytPlayer.getPlayerState();
-          if (st === YT.PlayerState.PLAYING || st === YT.PlayerState.BUFFERING) {
-            ytPlayer.pauseVideo();
-          }
-        }
-        loadedBlockType = 'STANDBY';
-        return;
-      } else {
-        standbyOverlay.classList.add('hidden');
-      }
-
-      // CASE B: Active Playback (Either 'VIDEO' pseudo-live or 'LIVE' actual stream on CH1)
-      if (!isPlayerReady || !ytPlayer || typeof ytPlayer.loadVideoById !== 'function') return;
-
-      // Calculate target Live Edge position (in seconds) within the current block
-      let targetLiveEdgeSec = Math.max(0, nowSec - current.startSec);
-
-      // For actual LIVE streams that may have a longer DVR buffer on YouTube,
-      // if the player reports a longer duration than elapsed block time, use the latest edge if appropriate
-      if (current.type === 'LIVE') {
-        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        if (dur > 0 && targetLiveEdgeSec > dur) {
-          targetLiveEdgeSec = Math.max(0, dur - 1);
-        }
-      }
-
-      // Did the scheduled video ID or block type change?
-      if (loadedVideoId !== current.videoId || loadedBlockType !== current.type) {
-        loadedVideoId = current.videoId;
-        loadedBlockType = current.type;
-        setPlaybackSpeed(1.0);
-
-        ytPlayer.loadVideoById({
-          videoId: current.videoId,
-          startSeconds: Math.floor(targetLiveEdgeSec)
-        });
-
-        if (currentChannel === 1) {
-          updateYouTubeChatEmbed();
-        }
-        return;
-      }
-
-      // Check Player State & Live Delay (Lag)
-      const playerState = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
-      if (playerState !== YT.PlayerState.PLAYING) {
-        if (forceSeek) {
-          ytPlayer.seekTo(targetLiveEdgeSec, true);
+        if (ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
           ytPlayer.playVideo();
         }
-        return;
-      }
-
-      const currentPos = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : targetLiveEdgeSec;
-      const lagSec = targetLiveEdgeSec - currentPos;
-
-      // Update Telemetry UI
-      updateTelemetryUI(lagSec, current.type);
-
-      // Force seek requested by button
-      if (forceSeek) {
-        setPlaybackSpeed(1.0);
-        ytPlayer.seekTo(targetLiveEdgeSec, true);
-        showPlayerToast('⚡ 最新ライブ基準位置へ同期しました');
-        return;
-      }
-
-      /*********************************************************************
-       * LIVE DELAY CATCH-UP LOGIC (As specified in prompt):
-       * 1) If lag >= 30 seconds: Immediately skip/seek to the live edge!
-       * 2) If lag is between 2.5s and <30s: Speed up playback (1.5x) until caught up!
-       * 3) If lag <= 0.8s (caught up): Restore normal speed (1.0x).
-       *********************************************************************/
-      if (lagSec >= 30.0) {
-        setPlaybackSpeed(1.0);
-        ytPlayer.seekTo(targetLiveEdgeSec, true);
-        if (nowMs - lastSkipToastTime > 3000) {
-          showPlayerToast(`🚀 30秒以上の遅延（+${lagSec.toFixed(1)}秒）を検知！最新ライブ位置へ即スキップしました`);
-          lastSkipToastTime = nowMs;
-        }
-      } else if (lagSec >= 2.5) {
-        // Delayed between 2.5s and 30s -> Speed up to catch up!
-        const desiredRate = lagSec > 12 ? 1.5 : 1.5;
-        setPlaybackSpeed(desiredRate, lagSec);
-      } else if (lagSec <= 0.8 && currentPlaybackRate !== 1.0) {
-        // Caught up to live edge -> Return to 1.0x normal speed
-        setPlaybackSpeed(1.0);
-        showPlayerToast('✅ ライブ最新位置に追いつきました（1.0x 等倍再生へ復帰）');
-      } else if (lagSec < -4.0) {
-        // If somehow ahead of schedule by >4s, snap back to live edge
-        setPlaybackSpeed(1.0);
-        ytPlayer.seekTo(targetLiveEdgeSec, true);
-      }
+      } catch (_) {}
     }
 
-    function setPlaybackSpeed(rate, lagSec = 0) {
-      if (!ytPlayer || typeof ytPlayer.setPlaybackRate !== 'function') return;
-      if (currentPlaybackRate !== rate) {
-        currentPlaybackRate = rate;
-        try {
-          ytPlayer.setPlaybackRate(rate);
-        } catch (e) {}
-      }
+    window.addEventListener('pointerdown', () => {
+      if (!isMuted) ensureAudioUnmuted();
+    }, { once: true });
 
-      const osdSpeedBadge = document.getElementById('osd-speed-badge');
-      const catchupBanner = document.getElementById('catchup-active-banner');
-      const catchupBannerText = document.getElementById('catchup-banner-text');
-
-      if (rate > 1.0) {
-        osdSpeedBadge.classList.remove('hidden');
-        osdSpeedBadge.textContent = `⚡ 遅延追いつき倍速中 (${rate.toFixed(1)}x)`;
-        catchupBanner.classList.remove('hidden');
-        catchupBanner.classList.add('flex');
-        catchupBannerText.textContent = `⚡ 遅延追いつき中 ${rate.toFixed(1)}x倍速 (残り遅延: +${Math.max(0, lagSec).toFixed(1)}秒)`;
-      } else {
-        osdSpeedBadge.classList.add('hidden');
-        catchupBanner.classList.add('hidden');
-        catchupBanner.classList.remove('flex');
-      }
-    }
-
-    function updateTelemetryUI(lagSec, blockType) {
-      const rateEl = document.getElementById('telemetry-rate');
-      const lagEl = document.getElementById('telemetry-lag');
-
-      if (currentPlaybackRate > 1.0) {
-        rateEl.textContent = `${currentPlaybackRate.toFixed(1)}x (倍速追いつき中)`;
-        rateEl.className = 'font-bold text-amber-400 animate-pulse';
-      } else {
-        rateEl.textContent = '1.0x (等倍)';
-        rateEl.className = 'font-bold text-emerald-400';
-      }
-
-      const displayLag = Math.max(0, lagSec);
-      lagEl.textContent = `${displayLag.toFixed(1)}秒`;
-      if (displayLag >= 30) {
-        lagEl.className = 'font-bold text-red-400';
-      } else if (displayLag >= 2.5) {
-        lagEl.className = 'font-bold text-amber-400';
-      } else {
-        lagEl.className = 'font-bold text-tv-cyan';
-      }
-    }
-
-    /**
-     * Test Helper: Simulates viewer lag by seeking backwards `secondsBehind` seconds.
-     * - If 15s behind: triggers 1.5x catch-up playback speed!
-     * - If 35s behind: triggers >=30s instant skip back to live edge!
-     */
-    function simulateDelay(secondsBehind) {
-      if (!isPlayerReady || !ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return;
-      const nowSec = Date.now() / 1000;
-      const { current } = getActiveBlockForChannel(currentChannel, nowSec);
-      if (!current || current.type === 'STANDBY') {
-        showPlayerToast('⚠️ 現在は10分前待機画面のため、動画または本番ライブ再生中にお試しください');
-        return;
-      }
-
-      const liveEdge = Math.max(0, nowSec - current.startSec);
-      const simulatedPos = Math.max(0, liveEdge - secondsBehind);
-      ytPlayer.seekTo(simulatedPos, true);
-
-      if (secondsBehind < 30) {
-        showPlayerToast(`🧪 再生位置を -${secondsBehind}秒 遅らせました → 自動で1.5x倍速追いつきを開始します！`);
-      }
-      // Run check shortly after seek settles
-      setTimeout(() => syncPlayerWithSchedule(false), 350);
-    }
-
-    function forceSyncToLiveEdge() {
-      syncPlayerWithSchedule(true);
-    }
-
-    /*************************************************************************
-     * 5. CHANNEL SWITCHING & LIVE SCENARIO PRESETS
-     *************************************************************************/
-    function switchChannel(chNum) {
-      if (currentChannel === chNum) return;
-      currentChannel = chNum;
-      loadedVideoId = null; // Force clean reload for selected channel
-      setPlaybackSpeed(1.0);
-
-      // Update Header Tabs
-      const tab1 = document.getElementById('tab-ch1');
-      const tab2 = document.getElementById('tab-ch2');
-
-      if (chNum === 1) {
-        tab1.className = 'flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 bg-gradient-to-r from-tv-orange to-pink-600 text-white shadow-md shadow-tv-orange/25';
-        tab2.className = 'flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white';
-      } else {
-        tab2.className = 'flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md shadow-cyan-500/25';
-        tab1.className = 'flex-1 lg:flex-initial flex items-center justify-center gap-2.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white';
-      }
-
-      // Update Sidebar Visibility (CH1 shows Live Chat, CH2 hides Live Chat & shows CH2 Video Info)
-      updateSidebarLayout();
-
-      // Immediately sync player & EPG
-      syncPlayerWithSchedule(true);
-      renderEPG();
-    }
-
-    function updateSidebarLayout() {
-      const playerCol = document.getElementById('player-column');
-      const sidebarCol = document.getElementById('sidebar-column');
-      const ch1Chat = document.getElementById('ch1-chat-container');
-      const ch2Info = document.getElementById('ch2-info-container');
-      const btnToggleChat = document.getElementById('btn-toggle-chat');
-
-      if (currentChannel === 1) {
-        btnToggleChat.classList.remove('hidden');
-        ch2Info.classList.add('hidden');
-        ch2Info.classList.remove('flex');
-
-        if (isChatVisible) {
-          sidebarCol.classList.remove('hidden');
-          ch1Chat.classList.remove('hidden');
-          ch1Chat.classList.add('flex');
-          playerCol.className = 'lg:col-span-8 flex flex-col gap-3';
-        } else {
-          sidebarCol.classList.add('hidden');
-          playerCol.className = 'lg:col-span-12 flex flex-col gap-3';
-        }
-      } else {
-        // Channel 2 selected: Live chat is NEVER shown on Channel 2
-        btnToggleChat.classList.add('hidden');
-        sidebarCol.classList.remove('hidden');
-        ch1Chat.classList.add('hidden');
-        ch1Chat.classList.remove('flex');
-        ch2Info.classList.remove('hidden');
-        ch2Info.classList.add('flex');
-        playerCol.className = 'lg:col-span-8 flex flex-col gap-3';
-      }
-    }
-
-    function toggleChatPanel() {
-      if (currentChannel !== 1) return;
-      isChatVisible = !isChatVisible;
-      const label = document.getElementById('toggle-chat-label');
-      label.textContent = isChatVisible ? 'チャット表示中' : 'チャットを表示';
-      updateSidebarLayout();
-    }
-
-    /**
-     * Scenario Simulator Presets for testing all requirements with 1 click
-     */
-    function setLiveFrameScenario(mode) {
-      const nowSec = Math.floor(Date.now() / 1000);
-
-      if (mode === 'NONE') {
-        liveFrameConfig.enabled = false;
-        showPlayerToast('📡 通常モード：CH1・CH2ともに全端末共通ランダム動画を放送します');
-      } else if (mode === 'STANDBY_10MIN') {
-        liveFrameConfig.enabled = true;
-        // Set live start to 9 minutes 30 seconds from now (inside the 10-minute standby window)
-        liveFrameConfig.startSec = nowSec + 570;
-        liveFrameConfig.endSec = liveFrameConfig.startSec + 3600;
-        showPlayerToast('⏳ 開始10分前モード：CH1は動画再生を中止し待機画面へ変化しました（CH2は動画継続）');
-      } else if (mode === 'COUNTDOWN_15S') {
-        liveFrameConfig.enabled = true;
-        // Set live start to 15 seconds from now so user can watch standby -> live automatic transition!
-        liveFrameConfig.startSec = nowSec + 15;
-        liveFrameConfig.endSec = liveFrameConfig.startSec + 3600;
-        showPlayerToast('⏱️ 15秒後に配信開始！待機画面から本番ライブへの自動切り替わりを確認できます');
-      } else if (mode === 'LIVE_NOW') {
-        liveFrameConfig.enabled = true;
-        // Set live started 120 seconds ago
-        liveFrameConfig.startSec = nowSec - 120;
-        liveFrameConfig.endSec = liveFrameConfig.startSec + 3600;
-        showPlayerToast('🔴 本番ライブ配信中モード：CH1で生配信を再生中！（遅延テストボタンで倍速＆スキップを確認可能）');
-      }
-
-      updateScenarioButtonsUI(mode);
-      loadedVideoId = null;
-      syncPlayerWithSchedule(true);
-      renderEPG();
-    }
-
-    function updateScenarioButtonsUI(activeMode) {
-      const map = {
-        NONE: 'sim-btn-normal',
-        STANDBY_10MIN: 'sim-btn-standby',
-        COUNTDOWN_15S: 'sim-btn-countdown15',
-        LIVE_NOW: 'sim-btn-live'
-      };
-      Object.entries(map).forEach(([key, btnId]) => {
-        const el = document.getElementById(btnId);
-        if (!el) return;
-        if (key === activeMode) {
-          el.className = 'px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-tv-orange text-white shadow-md shadow-tv-orange/30 border border-orange-400';
-        } else {
-          el.className = 'px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700';
-        }
-      });
-    }
-
-    /*************************************************************************
-     * 6. UI RENDERERS (OSD, STANDBY SCREEN, EPG TIMETABLE, CLOCK)
-     *************************************************************************/
-    function formatHMS(dateObj) {
-      const h = String(dateObj.getHours()).padStart(2, '0');
-      const m = String(dateObj.getMinutes()).padStart(2, '0');
-      const s = String(dateObj.getSeconds()).padStart(2, '0');
-      return `${h}:${m}:${s}`;
-    }
-
-    function formatHM(secEpoch) {
-      const d = new Date(secEpoch * 1000);
-      const h = String(d.getHours()).padStart(2, '0');
-      const m = String(d.getMinutes()).padStart(2, '0');
-      return `${h}:${m}`;
-    }
-
-    function formatMMSS(seconds) {
-      const s = Math.max(0, Math.floor(seconds));
-      const m = Math.floor(s / 60);
-      const rem = s % 60;
-      return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
-    }
-
-    function updateJSTClock() {
-      const now = new Date();
-      const jstStr = now.toLocaleTimeString('ja-JP', {
-        timeZone: 'Asia/Tokyo',
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      const ms = String(Math.floor(now.getMilliseconds() / 100));
-      document.getElementById('jst-clock').textContent = `${jstStr}.${ms}`;
-    }
-
-    function updateStandbyOverlayUI(standbyBlock, nowSec) {
-      const remainingSec = Math.max(0, standbyBlock.endSec - nowSec);
-      const mins = Math.floor(remainingSec / 60);
-      const secs = Math.floor(remainingSec % 60);
-      const tenths = Math.floor((remainingSec % 1) * 10);
-
-      document.getElementById('standby-countdown').textContent =
-        `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
-
-      document.getElementById('standby-stream-title').textContent =
-        standbyBlock.scheduledTitle || liveFrameConfig.title;
-      document.getElementById('standby-start-time-label').textContent =
-        `配信開始予定時刻: ${formatHM(standbyBlock.endSec)}〜`;
-      document.getElementById('standby-thumb').src =
-        `https://i.ytimg.com/vi/${standbyBlock.videoId}/hqdefault.jpg`;
-    }
-
-    function updateProgramDisplayUI(current, next, nowSec) {
-      const elapsed = Math.max(0, nowSec - current.startSec);
-      const total = Math.max(1, current.duration);
-      const pct = Math.min(100, (elapsed / total) * 100);
-
-      document.getElementById('live-progress-bar').style.width = `${pct.toFixed(1)}%`;
-
-      // OSD & Floating Badges
-      const osdChBadge = document.getElementById('osd-ch-badge');
-      const osdModeBadge = document.getElementById('osd-mode-badge');
-      const livePillDot = document.getElementById('live-pill-dot');
-      const livePillText = document.getElementById('live-pill-text');
-      const ch1HeaderBadge = document.getElementById('ch1-header-badge');
-
-      // Update CH1 header status pill based on CH1's current block
-      const ch1Active = getActiveBlockForChannel(1, nowSec).current;
-      if (ch1Active && ch1Active.type === 'STANDBY') {
-        ch1HeaderBadge.textContent = '⏳ 10分前待機中';
-        ch1HeaderBadge.className = 'px-1.5 py-0.5 text-[10px] rounded bg-amber-400 text-black font-black animate-pulse';
-      } else if (ch1Active && ch1Active.type === 'LIVE') {
-        ch1HeaderBadge.textContent = '🔴 生配信LIVE中';
-        ch1HeaderBadge.className = 'px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white font-black animate-pulse';
-      } else {
-        ch1HeaderBadge.textContent = 'LIVE連動';
-        ch1HeaderBadge.className = 'px-1.5 py-0.5 text-[10px] rounded bg-white/20 text-white font-semibold';
-      }
-
-      if (currentChannel === 1) {
-        osdChBadge.textContent = 'CH1 : MAIN (ライブ連動)';
-        osdChBadge.className = 'px-2.5 py-1 rounded-md text-xs font-black bg-tv-orange text-white shadow';
-      } else {
-        osdChBadge.textContent = 'CH2 : 24H 動画専門';
-        osdChBadge.className = 'px-2.5 py-1 rounded-md text-xs font-black bg-cyan-500 text-slate-950 shadow';
-      }
-
-      if (current.type === 'LIVE') {
-        osdModeBadge.textContent = '🔴 たかねこちゃんねる 生配信中';
-        livePillDot.className = 'w-2 h-2 rounded-full bg-red-500 animate-ping';
-        livePillText.textContent = 'CH1 本番ライブ配信中 (LIVE SYNC)';
-      } else if (current.type === 'STANDBY') {
-        osdModeBadge.textContent = '⏳ 配信開始10分前待機中';
-        livePillDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
-        livePillText.textContent = 'CH1 配信開始待機中';
-      } else {
-        osdModeBadge.textContent = '全端末同期ランダム放送中';
-        livePillDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
-        livePillText.textContent = `CH${currentChannel} 全端末同期放送中`;
-      }
-
-      document.getElementById('osd-time-slot').textContent =
-        `${formatHM(current.startSec)} - ${formatHM(current.endSec)}`;
-      document.getElementById('osd-video-title').textContent = current.title;
-      document.getElementById('osd-elapsed').textContent = formatMMSS(elapsed);
-      document.getElementById('osd-duration').textContent = formatMMSS(total);
-
-      // Below-Player Now Playing Card
-      const chTag = document.getElementById('now-playing-ch-tag');
-      if (currentChannel === 1) {
-        chTag.textContent = '視聴チャンネル1 (MAIN)';
-        chTag.className = 'px-2 py-0.5 text-[10px] font-black rounded bg-tv-orange text-white';
-      } else {
-        chTag.textContent = '視聴チャンネル2 (動画専門)';
-        chTag.className = 'px-2 py-0.5 text-[10px] font-black rounded bg-cyan-500 text-slate-950';
-      }
-
-      document.getElementById('now-playing-time-range').textContent =
-        `${formatHM(current.startSec)} - ${formatHM(current.endSec)}`;
-      document.getElementById('now-playing-seed-tag').textContent =
-        current.type === 'LIVE'
-          ? 'MODE: REALTIME LIVE STREAM'
-          : current.type === 'STANDBY'
-            ? 'MODE: 10-MIN STANDBY'
-            : `SYNC SEED: #CH${currentChannel}-${current.cycleIdx || 0}`;
-
-      document.getElementById('now-playing-title').textContent = current.title;
-      document.getElementById('now-playing-thumb').src =
-        `https://i.ytimg.com/vi/${current.videoId}/hqdefault.jpg`;
-
-      if (next) {
-        document.getElementById('next-playing-time').textContent = `${formatHM(next.startSec)}〜`;
-        document.getElementById('next-playing-title').textContent = next.title;
-      }
-    }
-
-    /**
-     * Renders the Electronic Program Guide (EPG) for both Channel 1 and Channel 2
-     */
-    function renderEPG() {
-      const nowSec = Date.now() / 1000;
-
-      renderSingleChannelEPG(1, 'epg-list-ch1', nowSec);
-      renderSingleChannelEPG(2, 'epg-list-ch2', nowSec);
-      renderCh2UpcomingSidebar(nowSec);
-    }
-
-    function renderSingleChannelEPG(channelNum, containerId, nowSec) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-
-      const blocks = getChannelScheduleBlocks(channelNum, nowSec)
-        .filter(b => b.endSec > nowSec - 60)
-        .slice(0, 8);
-
-      // Update CH1 status badge in EPG header
-      if (channelNum === 1) {
-        const badge = document.getElementById('epg-ch1-status-badge');
-        const active = blocks.find(b => nowSec >= b.startSec && nowSec < b.endSec);
-        if (active && active.type === 'LIVE') {
-          badge.textContent = '🔴 本番ライブ放送枠';
-          badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse';
-        } else if (active && active.type === 'STANDBY') {
-          badge.textContent = '⏳ 10分前待機枠';
-          badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
-        } else if (liveFrameConfig.enabled) {
-          badge.textContent = '📡 ライブ枠予約あり';
-          badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-tv-orange/20 text-tv-orange border border-tv-orange/40';
-        } else {
-          badge.textContent = 'ランダム動画同期中';
-          badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-        }
-      }
-
-      container.innerHTML = blocks.map((b, idx) => {
-        const isCurrent = nowSec >= b.startSec && nowSec < b.endSec;
-        const isNext = !isCurrent && idx === 1;
-        const pct = isCurrent
-          ? Math.min(100, Math.max(0, ((nowSec - b.startSec) / b.duration) * 100))
-          : 0;
-
-        let cardStyle = 'bg-slate-900/70 border-slate-800/90 hover:border-slate-700';
-        let badgeHtml = '';
-
-        if (b.type === 'LIVE') {
-          cardStyle = 'bg-gradient-to-r from-red-950/70 via-slate-900 to-slate-900 border-red-500/60 shadow-lg shadow-red-950/30';
-          badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-red-600 text-white animate-pulse">🔴 生配信枠 (LIVE)</span>`;
-        } else if (b.type === 'STANDBY') {
-          cardStyle = 'bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-900 border-amber-500/50';
-          badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-400 text-slate-950">⏳ 10分前待機枠</span>`;
-        } else if (isCurrent) {
-          cardStyle = channelNum === 1
-            ? 'bg-gradient-to-r from-tv-orange/20 via-slate-900 to-slate-900 border-tv-orange/60'
-            : 'bg-gradient-to-r from-cyan-500/20 via-slate-900 to-slate-900 border-cyan-500/60';
-          badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-black ${channelNum === 1 ? 'bg-tv-orange text-white' : 'bg-cyan-400 text-slate-950'}">放送中 ON AIR</span>`;
-        } else if (isNext) {
-          badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">NEXT</span>`;
-        }
-
-        return `
-          <div
-            onclick="switchChannel(${channelNum})"
-            class="cursor-pointer rounded-xl p-3 border transition ${cardStyle}"
-          >
-            <div class="flex items-start gap-3">
-              <img
-                src="https://i.ytimg.com/vi/${b.videoId}/hqdefault.jpg"
-                onerror="this.src='https://placehold.co/160x90/1e293b/ff6b2b?text=TAKANEKO'"
-                alt="thumb"
-                class="w-20 h-12 object-cover rounded-lg border border-slate-700 shrink-0 mt-0.5"
-              />
-              <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
-                  <div class="flex items-center gap-2">
-                    <span class="font-mono text-xs font-bold text-tv-cyan">
-                      ${formatHM(b.startSec)} - ${formatHM(b.endSec)}
-                    </span>
-                    ${badgeHtml}
-                  </div>
-                  <span class="font-mono text-[10px] text-slate-400">${Math.round(b.duration / 60)}分</span>
-                </div>
-                <div class="text-xs sm:text-sm font-bold text-white line-clamp-1">
-                  ${b.title}
-                </div>
-                ${isCurrent ? `
-                  <div class="mt-2 w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
-                    <div class="h-full ${channelNum === 1 ? 'bg-tv-orange' : 'bg-cyan-400'}" style="width: ${pct.toFixed(1)}%"></div>
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function renderCh2UpcomingSidebar(nowSec) {
-      const container = document.getElementById('ch2-upcoming-list');
-      if (!container) return;
-
-      const blocks = getChannelScheduleBlocks(2, nowSec)
-        .filter(b => b.endSec > nowSec)
-        .slice(0, 5);
-
-      container.innerHTML = blocks.map((b, i) => `
-        <div class="p-2.5 rounded-xl bg-slate-900/90 border ${i === 0 ? 'border-cyan-500/50' : 'border-slate-800'} flex items-center gap-2.5">
-          <div class="font-mono text-[11px] font-bold ${i === 0 ? 'text-cyan-300' : 'text-slate-400'} shrink-0">
-            ${formatHM(b.startSec)}
-          </div>
-          <div class="text-xs font-semibold text-slate-200 truncate flex-1">
-            ${b.title}
-          </div>
-          ${i === 0 ? '<span class="px-1.5 py-0.5 text-[9px] font-black bg-cyan-500 text-slate-950 rounded">NOW</span>' : ''}
-        </div>
-      `).join('');
-    }
-
-    /*************************************************************************
-     * 7. AUDIO, FULLSCREEN & TOAST CONTROLS
-     *************************************************************************/
-    function toggleMute() {
-      if (!isPlayerReady || !ytPlayer) return;
+    function toggleAudio() {
+      if (!ytPlayer || !playerReady) return;
       if (ytPlayer.isMuted()) {
         ytPlayer.unMute();
-        updateMuteUI(false);
+        ytPlayer.setVolume(100);
+        isMuted = false;
       } else {
         ytPlayer.mute();
-        updateMuteUI(true);
+        isMuted = true;
       }
+      updateAudioIcon();
     }
 
-    function unmuteFromOverlay(e) {
-      if (e) e.stopPropagation();
-      if (!isPlayerReady || !ytPlayer) return;
-      ytPlayer.unMute();
-      ytPlayer.setVolume(80);
-      ytPlayer.playVideo();
-      updateMuteUI(false);
+    function updateAudioIcon() {
+      if (!ytPlayer || !playerReady) return;
+      const muted = ytPlayer.isMuted();
+      document.getElementById('icon-vol-on').classList.toggle('hidden', muted);
+      document.getElementById('icon-vol-off').classList.toggle('hidden', !muted);
     }
 
-    function updateMuteUI(isMuted) {
-      const icon = document.getElementById('icon-volume');
-      const unmuteBtn = document.getElementById('unmute-overlay-btn');
-      if (isMuted) {
-        icon.className = 'fa-solid fa-volume-xmark text-red-400';
-        unmuteBtn.classList.remove('hidden');
+    // 6. チャンネル切替とYouTubeチャット更新
+    function switchChannel(ch) {
+      activeChannel = ch;
+      const btn1 = document.getElementById('btn-ch1');
+      const btn2 = document.getElementById('btn-ch2');
+      const chatCol = document.getElementById('chat-column');
+      const playerCol = document.getElementById('player-column');
+
+      if (ch === 1) {
+        btn1.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
+        btn2.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
+        chatCol.classList.remove('hidden');
+        playerCol.className = 'lg:col-span-9 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
       } else {
-        icon.className = 'fa-solid fa-volume-high text-tv-orange';
-        unmuteBtn.classList.add('hidden');
+        btn2.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
+        btn1.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
+        chatCol.classList.add('hidden');
+        playerCol.className = 'lg:col-span-12 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
       }
+
+      currentPlayingId = null;
+      syncPlayback(true);
     }
 
-    function handleVolumeChange(val) {
-      document.getElementById('volume-label').textContent = `${val}%`;
-      if (!isPlayerReady || !ytPlayer) return;
-      ytPlayer.setVolume(Number(val));
-      if (Number(val) > 0 && ytPlayer.isMuted()) {
-        ytPlayer.unMute();
-        updateMuteUI(false);
-      } else if (Number(val) === 0) {
-        updateMuteUI(true);
+    function updateYouTubeChat(videoId) {
+      const chatFrame = document.getElementById('yt-chat-frame');
+      if (activeChannel !== 1 || !videoId) {
+        if (currentChatVideoId !== null) {
+          chatFrame.src = 'about:blank';
+          currentChatVideoId = null;
+        }
+        return;
       }
+      if (currentChatVideoId === videoId) return;
+      currentChatVideoId = videoId;
+      const domain = location.hostname || 'localhost';
+      chatFrame.src = `https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}&embed_domain=${encodeURIComponent(domain)}&dark_theme=1`;
     }
 
-    function handleScreenTap() {
-      if (!isPlayerReady || !ytPlayer) return;
-      if (ytPlayer.isMuted()) {
-        unmuteFromOverlay();
-      }
+    // 7. リアルタイム再生同期・10分前待機・ライブ遅延の倍速＆30秒スキップ制御
+    function formatHM(sec) {
+      const d = new Date(sec * 1000);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     }
 
-    function toggleFullscreen() {
-      const frame = document.getElementById('tv-frame-container');
-      if (!document.fullscreenElement) {
-        if (frame.requestFullscreen) frame.requestFullscreen();
+    function syncPlayback(forceLoad = false) {
+      const nowSec = Date.now() / 1000;
+      const slot = getCurrentSlot(activeChannel, nowSec);
+      const standbyOverlay = document.getElementById('standby-overlay');
+      const countdownEl = document.getElementById('standby-countdown');
+      const titleEl = document.getElementById('current-title');
+      const thumbEl = document.getElementById('current-thumb');
+      const timeRangeEl = document.getElementById('current-time-range');
+
+      if (!slot) return;
+
+      // タイトル・サムネイル・時刻を現在の動画と完全一致させる
+      titleEl.textContent = slot.title;
+      timeRangeEl.textContent = `${formatHM(slot.startSec)} - ${formatHM(slot.endSec)}`;
+      if (slot.thumb) {
+        thumbEl.src = slot.thumb;
+        thumbEl.classList.remove('hidden');
+      }
+
+      // 視聴チャンネル1のチャット更新
+      updateYouTubeChat(slot.id);
+
+      // 視聴チャンネル1：開始10分前の待機状態
+      if (activeChannel === 1 && slot.type === 'wait') {
+        standbyOverlay.classList.remove('hidden');
+        const remain = Math.max(0, Math.ceil(slot.endSec - nowSec));
+        const m = String(Math.floor(remain / 60)).padStart(2, '0');
+        const s = String(remain % 60).padStart(2, '0');
+        countdownEl.textContent = `${m}:${s}`;
+
+        if (playerReady && ytPlayer) {
+          ytPlayer.pauseVideo();
+        }
+        currentPlayingId = null;
+        return;
+      }
+
+      standbyOverlay.classList.add('hidden');
+      if (!playerReady || !ytPlayer) return;
+
+      const targetOffset = Math.max(0, nowSec - slot.startSec);
+
+      // 動画またはライブ枠が切り替わった場合
+      if (forceLoad || currentPlayingId !== slot.id) {
+        currentPlayingId = slot.id;
+        ytPlayer.loadVideoById({
+          videoId: slot.id,
+          startSeconds: slot.type === 'live' ? undefined : targetOffset
+        });
+        disableCaptions();
+        if (!isMuted) {
+          ytPlayer.unMute();
+          ytPlayer.setVolume(100);
+        }
+        return;
+      }
+
+      // 遅延検知と自動追いつき（30秒以上遅れで即スキップ、それ以下の遅れは倍速再生）
+      const playerTime = ytPlayer.getCurrentTime() || 0;
+      const realDuration = ytPlayer.getDuration() || 0;
+
+      let idealTime = targetOffset;
+      if (slot.type === 'live' && realDuration > 0) {
+        idealTime = realDuration;
+      }
+
+      const lag = idealTime - playerTime;
+
+      if (lag >= 30) {
+        ytPlayer.seekTo(idealTime, true);
+        ytPlayer.setPlaybackRate(1.0);
+      } else if (lag > 2.5) {
+        ytPlayer.setPlaybackRate(1.5);
+      } else if (lag < -3 && slot.type === 'video') {
+        ytPlayer.seekTo(idealTime, true);
+        ytPlayer.setPlaybackRate(1.0);
       } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-      }
-    }
-
-    let toastTimeout = null;
-    function showPlayerToast(msg) {
-      const toast = document.getElementById('player-toast');
-      const text = document.getElementById('player-toast-text');
-      text.textContent = msg;
-      toast.classList.remove('hidden');
-      clearTimeout(toastTimeout);
-      toastTimeout = setTimeout(() => {
-        toast.classList.add('hidden');
-      }, 4200);
-    }
-
-    /*************************************************************************
-     * 8. CHANNEL 1 LIVE CHAT ENGINE (INTERACTIVE + YOUTUBE EMBED)
-     *************************************************************************/
-    const INITIAL_CHAT_MESSAGES = [
-      { user: 'たかねこ推し隊🐾', color: 'text-tv-orange', text: '全デバイス同期だからスマホとPCで全く同じ秒数流れててすごい！！', time: 'NOW' },
-      { user: 'すしユニバース民🍣', color: 'text-cyan-400', text: 'YouTubeのタイトルバーも広告も出ないからマジでテレビ感覚で見れるｗ', time: 'NOW' },
-      { user: 'ねこみみリスナー', color: 'text-pink-400', text: 'たかねこちゃんねる24時間垂れ流し最高すぎる！', time: 'NOW' },
-      { user: 'カメレオン職人🦎', color: 'text-emerald-400', text: '配信枠たつと10分前にちゃんと待機画面になるの神仕様', time: 'NOW' }
-    ];
-
-    const BOT_COMMENTS = [
-      { user: 'たかねこ待機勢🐱', color: 'text-amber-400', text: 'ここ好きすぎるｗｗｗ' },
-      { user: '夜更かしたかねこ民', color: 'text-cyan-300', text: '全端末で同じタイミングだから実況が盛り上がるね！' },
-      { user: 'お寿司食べたい🍣', color: 'text-pink-400', text: '888888888👏👏👏' },
-      { user: 'レスキュー隊員🚒', color: 'text-emerald-400', text: 'たかねこのリアクションほんと元気出るｗ' },
-      { user: 'にんじん妖精🥕', color: 'text-purple-400', text: 'CH1はライブ連動でCH2は24時間動画専門なの便利！' }
-    ];
-
-    function initChatStream() {
-      const box = document.getElementById('chat-messages-box');
-      box.innerHTML = '';
-      INITIAL_CHAT_MESSAGES.forEach(m => appendChatMessage(m.user, m.text, m.color));
-
-      // Periodic simulated viewer comments
-      setInterval(() => {
-        if (currentChannel !== 1) return;
-        const pick = BOT_COMMENTS[Math.floor(Math.random() * BOT_COMMENTS.length)];
-        appendChatMessage(pick.user, pick.text, pick.color);
-
-        // Fluctuate viewer count slightly
-        const countEl = document.getElementById('chat-viewer-count');
-        const base = liveFrameConfig.enabled ? 2840 : 1420;
-        countEl.textContent = (base + Math.floor(Math.random() * 95)).toLocaleString();
-      }, 6500);
-    }
-
-    function appendChatMessage(user, text, colorClass = 'text-tv-cyan') {
-      const box = document.getElementById('chat-messages-box');
-      if (!box) return;
-      const now = new Date();
-      const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const div = document.createElement('div');
-      div.className = 'bg-slate-900/75 border border-slate-800/80 rounded-xl px-3 py-2 flex flex-col gap-0.5';
-      div.innerHTML = `
-        <div class="flex items-center justify-between text-[10px]">
-          <span class="font-bold ${colorClass}">${escapeHtml(user)}</span>
-          <span class="font-mono text-slate-500">${hm}</span>
-        </div>
-        <div class="text-xs text-slate-100 break-words leading-relaxed">${escapeHtml(text)}</div>
-      `;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function handleChatSubmit(e) {
-      e.preventDefault();
-      const input = document.getElementById('chat-input');
-      const val = input.value.trim();
-      if (!val) return;
-      appendChatMessage('あなた (視聴者)', val, 'text-tv-orange');
-      input.value = '';
-    }
-
-    function sendQuickChat(text) {
-      appendChatMessage('あなた (視聴者)', text, 'text-tv-orange');
-    }
-
-    function switchChatTab(tab) {
-      activeChatTab = tab;
-      const btnParty = document.getElementById('chat-tab-party');
-      const btnYt = document.getElementById('chat-tab-yt');
-      const viewParty = document.getElementById('chat-view-party');
-      const viewYt = document.getElementById('chat-view-yt');
-
-      if (tab === 'PARTY') {
-        btnParty.className = 'py-1.5 rounded-lg bg-slate-800 text-white transition flex items-center justify-center gap-1.5';
-        btnYt.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5';
-        viewParty.classList.remove('hidden');
-        viewParty.classList.add('flex');
-        viewYt.classList.add('hidden');
-        viewYt.classList.remove('flex');
-      } else {
-        btnYt.className = 'py-1.5 rounded-lg bg-slate-800 text-white transition flex items-center justify-center gap-1.5';
-        btnParty.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5';
-        viewYt.classList.remove('hidden');
-        viewYt.classList.add('flex');
-        viewParty.classList.add('hidden');
-        viewParty.classList.remove('flex');
-        updateYouTubeChatEmbed();
-      }
-    }
-
-    function updateYouTubeChatEmbed() {
-      const targetId = liveFrameConfig.enabled
-        ? liveFrameConfig.liveVideoId
-        : (loadedVideoId || 'lKQKSVgymHA');
-      const domain = window.location.hostname || 'localhost';
-      document.getElementById('yt-chat-video-id').textContent = targetId;
-      document.getElementById('yt-chat-popout-link').href = `https://www.youtube.com/live_chat?v=${targetId}`;
-
-      if (activeChatTab === 'YOUTUBE') {
-        const iframe = document.getElementById('yt-live-chat-iframe');
-        const desiredSrc = `https://www.youtube.com/live_chat?v=${targetId}&embed_domain=${domain}&dark_theme=1`;
-        if (iframe.src !== desiredSrc) {
-          iframe.src = desiredSrc;
+        if (ytPlayer.getPlaybackRate() !== 1.0) {
+          ytPlayer.setPlaybackRate(1.0);
         }
       }
     }
 
-    /*************************************************************************
-     * 9. MODALS: CUSTOM LIVE CONFIG & VIDEO POOL MANAGER
-     *************************************************************************/
-    function extractYouTubeId(input) {
-      const trimmed = input.trim();
-      const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-      const match = trimmed.match(regExp);
-      if (match && match[1]) return match[1];
-      return trimmed.slice(0, 11);
+    // 8. 3日間対応のリアルなテレビ番組表 (EPG) 描画
+    function getDayStartUnixSec(dayOffset) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + dayOffset);
+      return Math.floor(d.getTime() / 1000);
     }
 
-    function openCustomLiveModal() {
-      document.getElementById('modal-live-config').classList.remove('hidden');
+    function renderEpgDayTabs() {
+      const container = document.getElementById('epg-day-tabs');
+      const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
+      container.innerHTML = '';
+
+      for (let i = 0; i < 3; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const label = `${d.getMonth() + 1}/${d.getDate()}(${weekNames[d.getDay()]})`;
+        const btn = document.createElement('button');
+        btn.className = i === selectedDayOffset
+          ? 'px-3 py-1 rounded text-xs font-bold bg-white text-black transition'
+          : 'px-3 py-1 rounded text-xs font-bold text-zinc-400 hover:text-white transition';
+        btn.textContent = label;
+        btn.onclick = () => {
+          selectedDayOffset = i;
+          renderEpgDayTabs();
+          renderEpgGrid();
+        };
+        container.appendChild(btn);
+      }
     }
 
-    function closeCustomLiveModal() {
-      document.getElementById('modal-live-config').classList.add('hidden');
+    function renderEpgGrid() {
+      const timeCol = document.getElementById('epg-time-col');
+      const ch1Col = document.getElementById('epg-ch1-col');
+      const ch2Col = document.getElementById('epg-ch2-col');
+
+      // 左端の24時間時刻軸
+      if (timeCol.children.length === 0) {
+        let timeHtml = '';
+        for (let h = 0; h < 24; h++) {
+          let bandClass = 'night';
+          if (h >= 5 && h < 11) bandClass = 'morning';
+          else if (h >= 11 && h < 18) bandClass = 'daytime';
+          else if (h >= 18 && h < 23) bandClass = 'prime';
+          timeHtml += `<div class="epg-hour-cell ${bandClass}">${h}</div>`;
+        }
+        timeCol.innerHTML = timeHtml;
+      }
+
+      const dayStartSec = getDayStartUnixSec(selectedDayOffset);
+      const dayEndSec = dayStartSec + 86400;
+      const nowSec = Date.now() / 1000;
+
+      const ch1Slots = getScheduleSlots(1, dayStartSec, dayEndSec);
+      const ch2Slots = getScheduleSlots(2, dayStartSec, dayEndSec);
+
+      ch1Col.innerHTML = buildChannelColumnHtml(ch1Slots, dayStartSec, dayEndSec, nowSec);
+      ch2Col.innerHTML = buildChannelColumnHtml(ch2Slots, dayStartSec, dayEndSec, nowSec);
+
+      updateNowBar();
     }
 
-    function saveCustomLiveConfig(e) {
-      e.preventDefault();
-      const rawId = document.getElementById('input-live-id').value;
-      const title = document.getElementById('input-live-title').value.trim();
-      const offsetMin = Number(document.getElementById('input-live-offset-min').value || 0);
-      const durationMin = Number(document.getElementById('input-live-duration-min').value || 60);
+    function buildChannelColumnHtml(slots, dayStartSec, dayEndSec, nowSec) {
+      let html = '';
+      for (const s of slots) {
+        const clampedStart = Math.max(dayStartSec, s.startSec);
+        const clampedEnd = Math.min(dayEndSec, s.endSec);
+        const topPx = ((clampedStart - dayStartSec) / 60) * PX_PER_MINUTE;
+        const heightPx = Math.max(18, ((clampedEnd - clampedStart) / 60) * PX_PER_MINUTE);
 
-      const nowSec = Math.floor(Date.now() / 1000);
-      liveFrameConfig = {
-        enabled: true,
-        liveVideoId: extractYouTubeId(rawId),
-        title: title || '【たかねこちゃんねる】特別生配信枠',
-        startSec: nowSec + offsetMin * 60,
-        endSec: nowSec + offsetMin * 60 + durationMin * 60
-      };
+        const startDate = new Date(s.startSec * 1000);
+        const minStr = String(startDate.getMinutes()).padStart(2, '0');
+        const isCurrent = nowSec >= s.startSec && nowSec < s.endSec;
 
-      closeCustomLiveModal();
-      loadedVideoId = null;
-      syncPlayerWithSchedule(true);
-      renderEPG();
-      showPlayerToast('✅ カスタム配信枠を番組表（CH1）および待機・ライブ制御へ反映しました');
-    }
+        let extraClass = '';
+        if (s.type === 'live') extraClass = 'live-slot';
+        else if (s.type === 'wait') extraClass = 'wait-slot';
+        else if (isCurrent) extraClass = 'active-program';
 
-    function openVideoModal() {
-      renderManagerVideoList();
-      document.getElementById('modal-video-manager').classList.remove('hidden');
-    }
+        const showThumb = heightPx >= 38;
 
-    function closeVideoModal() {
-      document.getElementById('modal-video-manager').classList.add('hidden');
-    }
-
-    function renderManagerVideoList() {
-      const listEl = document.getElementById('manager-video-list');
-      listEl.innerHTML = videoPool.map((v, i) => `
-        <div class="flex items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <img src="https://i.ytimg.com/vi/${v.id}/default.jpg" class="w-14 h-10 object-cover rounded border border-slate-700 shrink-0" />
-            <div class="min-w-0">
-              <div class="font-bold text-white truncate">${escapeHtml(v.title)}</div>
-              <div class="font-mono text-[11px] text-slate-400">ID: ${v.id} ／ 長さ: ${v.duration}秒 (${Math.round(v.duration/60)}分)</div>
-            </div>
+        html += `
+          <div class="epg-program-item ${extraClass}" style="top:${topPx}px; height:${heightPx}px;">
+            <span class="text-[11px] font-mono font-bold text-sky-400 shrink-0 leading-tight">${minStr}</span>
+            ${showThumb ? `<img src="${s.thumb}" alt="" loading="lazy" class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0 mt-0.5" />` : ''}
+            <div class="text-xs font-medium text-zinc-100 leading-snug line-clamp-2 break-all">${escapeHtml(s.title)}</div>
           </div>
-          ${videoPool.length > 1 ? `
-            <button onclick="removeVideoFromPool(${i})" class="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold shrink-0">
-              削除
-            </button>
-          ` : ''}
-        </div>
-      `).join('');
+        `;
+      }
+      return html;
     }
 
-    function handleAddVideo(e) {
-      e.preventDefault();
-      const rawId = document.getElementById('new-video-id').value;
-      const title = document.getElementById('new-video-title').value.trim();
-      const duration = Math.max(30, Number(document.getElementById('new-video-duration').value || 600));
-
-      const id = extractYouTubeId(rawId);
-      videoPool.push({ id, title, duration });
-      document.getElementById('new-video-id').value = '';
-      document.getElementById('new-video-title').value = '';
-      renderManagerVideoList();
-      loadedVideoId = null;
-      syncPlayerWithSchedule(true);
-      renderEPG();
+    function updateNowBar() {
+      const nowBar = document.getElementById('epg-now-bar');
+      if (selectedDayOffset !== 0) {
+        nowBar.classList.add('hidden');
+        return;
+      }
+      const dayStartSec = getDayStartUnixSec(0);
+      const nowSec = Date.now() / 1000;
+      const topPx = ((nowSec - dayStartSec) / 60) * PX_PER_MINUTE;
+      nowBar.style.top = `${topPx}px`;
+      nowBar.classList.remove('hidden');
     }
 
-    function removeVideoFromPool(index) {
-      if (videoPool.length <= 1) return;
-      videoPool.splice(index, 1);
-      renderManagerVideoList();
-      loadedVideoId = null;
-      syncPlayerWithSchedule(true);
-      renderEPG();
-    }
-
-    function resetDefaultVideos() {
-      videoPool = [...DEFAULT_VIDEOS];
-      brokenVideoIds.clear();
-      renderManagerVideoList();
-      loadedVideoId = null;
-      syncPlayerWithSchedule(true);
-      renderEPG();
+    function scrollToCurrentTime() {
+      if (selectedDayOffset !== 0) {
+        selectedDayOffset = 0;
+        renderEpgDayTabs();
+        renderEpgGrid();
+      }
+      const scroller = document.getElementById('epg-scroll');
+      const dayStartSec = getDayStartUnixSec(0);
+      const nowSec = Date.now() / 1000;
+      const topPx = ((nowSec - dayStartSec) / 60) * PX_PER_MINUTE;
+      scroller.scrollTo({
+        top: Math.max(0, topPx - 140),
+        behavior: 'smooth'
+      });
     }
 
     function escapeHtml(str) {
@@ -2299,30 +910,37 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/"/g, '&quot;');
     }
 
-    /*************************************************************************
-     * 10. INITIALIZATION & MAIN TIMERS
-     *************************************************************************/
-    window.addEventListener('DOMContentLoaded', () => {
-      initChatStream();
-      updateJSTClock();
-      renderEPG();
+    // 9. 時計と定期ループの開始
+    function tickClock() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      document.getElementById('clock-display').textContent = `${hh}:${mm}:${ss}`;
+    }
 
-      // High-precision JST clock ticker
-      setInterval(updateJSTClock, 100);
+    window.addEventListener('DOMContentLoaded', async () => {
+      tickClock();
+      await loadTakanekoVideosAndLiveStatus();
+      scrollToCurrentTime();
 
-      // Core Broadcast Synchronization & Delay Catch-Up Monitor (every 500ms)
       setInterval(() => {
-        syncPlayerWithSchedule(false);
-      }, 500);
+        tickClock();
+        syncPlayback(false);
+        updateNowBar();
+      }, 1000);
 
-      // Refresh EPG progress bars & time slots every 3 seconds
+      // 1分ごとに番組表のハイライト更新とチャンネルのライブ枠チェックを実施
       setInterval(() => {
-        renderEPG();
-      }, 3000);
+        renderEpgGrid();
+      }, 60000);
+
+      setInterval(() => {
+        loadTakanekoVideosAndLiveStatus();
+      }, 180000);
     });
   </script>
 </body>
