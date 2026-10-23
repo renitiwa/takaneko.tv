@@ -211,14 +211,14 @@
   <main class="max-w-[1600px] w-full mx-auto p-4 flex-1 flex flex-col gap-4">
     <div id="stage-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
       
-      <!-- プレイヤーカラム（チャット非表示時は12カラム全幅、チャット表示時は9カラム） -->
+      <!-- プレイヤーカラム -->
       <div id="player-column" class="lg:col-span-12 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
         <div id="video-viewport" class="video-viewport" onclick="handleViewportTap(event)">
           <div class="video-crop-wrapper">
             <div id="yt-player"></div>
           </div>
 
-          <!-- 10分前待機画面（視聴チャンネル1のライブ10分前〜開始まで） -->
+          <!-- 10分前〜ライブ開始までの待機画面（視聴チャンネル1用） -->
           <div id="standby-overlay" class="hidden absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
             <p class="text-lg md:text-2xl font-bold text-white tracking-wide">
               配信が開始されるまでお待ちください
@@ -325,8 +325,8 @@
     const PX_PER_MINUTE = 3; // 1分 = 3px (1時間 = 180px)
 
     /**
-     * たかねこちゃんねる (@takaneko_ch) の通常動画カタログ（全34本）
-     * ※ YouTubeライブ配信のアーカイブ、たかねこPodcast、ショート動画を除いたすべての通常動画
+     * たかねこちゃんねる (@takaneko_ch) の通常動画カタログ
+     * ※ YouTubeライブ配信アーカイブ・たかねこPodcast・ショート動画を除いたすべての通常動画
      */
     const BASE_VIDEOS = [
       { id: 'gUWj6fhTkQI', title: '【空気読み。】1人でやるゲームじゃないと悟ったオッサンの末路', duration: 680 },
@@ -365,13 +365,12 @@
       { id: 'iMmfbGWZ40M', title: '【鬼畜クソゲー】しょぼんのアクションHD【終わりの始まり】', duration: 2013 }
     ];
 
-    // 除外判定（たかねこPodcastやライブ配信アーカイブを除外）
     function isExcludedVideo(title, durationSec) {
       if (!title) return true;
       if (/podcast|ポッドキャスト/i.test(title)) return true;
       if (/【リハビリ\d+日目】|【たかねこのドライブゴーゴー】|【視聴者参加型|【コラボ配信】|【ハードコア|【飲酒実況】|【初見プレイ】/.test(title)) return true;
-      if (durationSec <= 65) return true; // ショート動画を除外
-      if (durationSec >= 3500) return true; // 長尺のライブアーカイブを除外
+      if (durationSec <= 65) return true;
+      if (durationSec >= 3500) return true;
       return false;
     }
 
@@ -380,13 +379,18 @@
       thumb: `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`
     }));
 
-    // ライブ配信枠の状態管理
+    /**
+     * ライブ配信枠の状態管理
+     * - isLiveNow: 本番ライブ配信が実際に始まっているか
+     * - isUpcoming: 配信開始前の予約枠（待機所）が立っているか
+     * - startTimeSec: 配信開始予定時刻（または実際の開始時刻）
+     */
     let liveStreamInfo = {
       videoId: null,
       title: '',
       startTimeSec: null,
-      endTimeSec: null,
-      isLiveNow: false
+      isLiveNow: false,
+      isUpcoming: false
     };
 
     let activeChannel = 1;
@@ -395,13 +399,20 @@
     let ytPlayer = null;
     let playerReady = false;
     let currentPlayingId = null;
+    let currentPlayingType = null; // 'video' | 'live' | null
     let currentChatVideoId = null;
     let isMuted = false;
     let userPaused = false;
     let selectedQuality = 'default';
     let hudTimer = null;
 
-    // 1. 全デバイス共通の決定論的シャッフル（1周するまで同じ動画は絶対に出ない順列生成）
+    // ライブ配信の遅延計測＆シーク制御用
+    let liveEdgeWallOriginSec = null;
+    let lastLoadOrSeekMs = 0;
+    let lastStandbyPollMs = 0;
+    let isCheckingLive = false;
+
+    // 1. 全デバイス共通の決定論的シャッフル（1周するまで同じ動画は出ない）
     function seededRandom(seed) {
       let t = (seed + 0x6D2B79F5) | 0;
       t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -420,7 +431,6 @@
       return arr;
     }
 
-    // 1周の中で重複ゼロ＋周回の境目でも前の周の最後の動画と被らないよう保証
     function getDeterministicShuffle(list, cycleIndex, channelSalt) {
       const currentOrder = computeCycleOrder(list, cycleIndex, channelSalt);
       if (currentOrder.length > 1) {
@@ -433,7 +443,17 @@
       return currentOrder;
     }
 
-    // 2. スケジュール計算
+    // 2. 番組表および再生スケジュール算出
+    function getLiveEndTimeSec(nowSec) {
+      if (!liveStreamInfo.startTimeSec) return nowSec + 7200;
+      const baseEnd = liveStreamInfo.startTimeSec + 7200;
+      // 2時間を超える長時間配信中もライブ枠が切れないように動的に延長
+      if (liveStreamInfo.isLiveNow || liveStreamInfo.isUpcoming) {
+        return Math.max(baseEnd, Math.ceil((nowSec + 3600) / 1800) * 1800);
+      }
+      return baseEnd;
+    }
+
     function getScheduleSlots(channelNum, rangeStartSec, rangeEndSec) {
       if (videoCatalog.length === 0) return [];
 
@@ -469,20 +489,21 @@
         }
       }
 
-      // 視聴チャンネル1でライブ配信枠（予約枠・本番中）がある場合のみ上書き
+      // 視聴チャンネル1のみ、ライブ枠（予約枠・ライブ中）を番組表およびスケジュールへ反映
       if (channelNum === 1 && liveStreamInfo.videoId && liveStreamInfo.startTimeSec) {
-        const waitStart = liveStreamInfo.startTimeSec - 600; // 10分前
+        const nowSec = Date.now() / 1000;
+        const waitStart = liveStreamInfo.startTimeSec - 600; // 開始10分前
         const liveStart = liveStreamInfo.startTimeSec;
-        const liveEnd = liveStreamInfo.endTimeSec || (liveStreamInfo.startTimeSec + 7200);
+        const liveEnd = getLiveEndTimeSec(nowSec);
 
         const filtered = [];
         for (const s of slots) {
           if (s.endSec <= waitStart || s.startSec >= liveEnd) {
             filtered.push(s);
           } else if (s.startSec < waitStart && s.endSec > waitStart) {
-            filtered.push({ ...s, endSec: waitStart });
+            filtered.push({ ...s, endSec: waitStart, duration: waitStart - s.startSec });
           } else if (s.startSec < liveEnd && s.endSec > liveEnd) {
-            filtered.push({ ...s, startSec: liveEnd });
+            filtered.push({ ...s, startSec: liveEnd, duration: s.endSec - liveEnd });
           }
         }
 
@@ -517,12 +538,46 @@
       return slots;
     }
 
+    // 現在時刻における視聴チャンネルの再生対象スロットを取得
     function getCurrentSlot(channelNum, nowSec) {
+      // 視聴チャンネル1でライブ枠が立っている場合の特別制御
+      if (channelNum === 1 && liveStreamInfo.videoId && liveStreamInfo.startTimeSec) {
+        const waitStart = liveStreamInfo.startTimeSec - 600;
+        const liveEnd = getLiveEndTimeSec(nowSec);
+
+        // 1) 実際にライブ配信が始まっている場合 (行われているとき)
+        if (liveStreamInfo.isLiveNow) {
+          return {
+            type: 'live',
+            id: liveStreamInfo.videoId,
+            title: liveStreamInfo.title,
+            thumb: `https://i.ytimg.com/vi/${liveStreamInfo.videoId}/mqdefault.jpg`,
+            startSec: Math.min(nowSec, liveStreamInfo.startTimeSec),
+            endSec: liveEnd,
+            duration: liveEnd - liveStreamInfo.startTimeSec
+          };
+        }
+
+        // 2) ライブ開始前 (残り10分前〜本番ライブが実際に始まるまで)
+        if (liveStreamInfo.isUpcoming && nowSec >= waitStart) {
+          return {
+            type: 'wait',
+            id: liveStreamInfo.videoId,
+            title: liveStreamInfo.title || '配信が開始されるまでお待ちください',
+            thumb: `https://i.ytimg.com/vi/${liveStreamInfo.videoId}/mqdefault.jpg`,
+            startSec: waitStart,
+            endSec: Math.max(liveStreamInfo.startTimeSec, nowSec),
+            scheduledStartSec: liveStreamInfo.startTimeSec,
+            duration: 600
+          };
+        }
+      }
+
       const slots = getScheduleSlots(channelNum, nowSec - 60, nowSec + 60);
       return slots.find(s => nowSec >= s.startSec && nowSec < s.endSec) || null;
     }
 
-    // 3. YouTube IFrame Player API（字幕自動オフ・音声デフォルトオン・画質適用）
+    // 3. YouTube IFrame Player API
     function onYouTubeIframeAPIReady() {
       const nowSec = Date.now() / 1000;
       const initialSlot = getCurrentSlot(activeChannel, nowSec);
@@ -530,7 +585,7 @@
       ytPlayer = new YT.Player('yt-player', {
         width: '100%',
         height: '100%',
-        videoId: initialSlot && initialSlot.type !== 'wait' ? initialSlot.id : BASE_VIDEOS[0].id,
+        videoId: initialSlot && initialSlot.type !== 'wait' ? initialSlot.id : undefined,
         playerVars: {
           autoplay: 1,
           controls: 0,
@@ -562,14 +617,22 @@
               if (selectedQuality !== 'default') {
                 try { ytPlayer.setPlaybackQuality(selectedQuality); } catch (_) {}
               }
+              // ライブ配信再生開始時にライブエッジ基準点を記録
+              if (currentPlayingType === 'live') {
+                const pTime = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
+                if (pTime > 0 && liveEdgeWallOriginSec === null) {
+                  liveEdgeWallOriginSec = (Date.now() / 1000) - pTime;
+                }
+              }
             } else if (e.data === YT.PlayerState.PAUSED) {
               updatePlayPauseIcon(true);
             } else if (e.data === YT.PlayerState.ENDED) {
-              // ライブ配信が終了した場合は即座にライブ枠を閉じて通常動画へ戻す
+              // ライブ配信が終了したらライブ状態を解除し、チャットを閉じて通常動画へ戻す
               if (liveStreamInfo.videoId && currentPlayingId === liveStreamInfo.videoId) {
                 clearLiveStreamState();
               }
               currentPlayingId = null;
+              currentPlayingType = null;
               syncPlayback(true);
             }
           },
@@ -580,7 +643,13 @@
             disableCaptions();
           },
           onError: () => {
+            // もしライブ開始直前でまだ再生不可だった場合は待機状態を維持して再チェック
+            if (currentPlayingType === 'live' && liveStreamInfo.videoId) {
+              liveStreamInfo.isLiveNow = false;
+              liveStreamInfo.isUpcoming = true;
+            }
             currentPlayingId = null;
+            currentPlayingType = null;
             setTimeout(() => syncPlayback(true), 1500);
           }
         }
@@ -606,10 +675,14 @@
         videoId: null,
         title: '',
         startTimeSec: null,
-        endTimeSec: null,
-        isLiveNow: false
+        isLiveNow: false,
+        isUpcoming: false
       };
+      liveEdgeWallOriginSec = null;
+      currentPlayingId = null;
+      currentPlayingType = null;
       renderEpgGrid();
+      syncPlayback(true);
     }
 
     // 4. プレイヤー操作（再生/一時停止・画質選択・全画面表示・タップ時HUD表示）
@@ -717,6 +790,7 @@
       }
 
       currentPlayingId = null;
+      currentPlayingType = null;
       syncPlayback(true);
     }
 
@@ -758,7 +832,7 @@
       }
     }
 
-    // 6. リアルタイム再生同期・10分前待機・倍速＆30秒スキップ追いつき制御
+    // 6. リアルタイム再生同期・10分前待機・本番ライブ追いつき（倍速＆30秒スキップ）
     function formatHM(sec) {
       const d = new Date(sec * 1000);
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -766,12 +840,6 @@
 
     function syncPlayback(forceLoad = false) {
       const nowSec = Date.now() / 1000;
-
-      // ライブ枠の終了時刻を過ぎていたらライブ状態を解除
-      if (liveStreamInfo.videoId && liveStreamInfo.endTimeSec && nowSec >= liveStreamInfo.endTimeSec) {
-        clearLiveStreamState();
-      }
-
       const slot = getCurrentSlot(activeChannel, nowSec);
       if (!slot) return;
 
@@ -787,22 +855,31 @@
       thumbEl.src = slot.thumb;
       timeRangeEl.textContent = `${formatHM(slot.startSec)} - ${formatHM(slot.endSec)}`;
 
-      // チャット表示制御（CH1のライブ10分前〜終了まで表示）
+      // チャット表示制御（CH1のライブ10分前〜ライブ終了まで表示）
       updateLiveChatVisibility(slot);
 
-      // 視聴チャンネル1のライブ開始10分前待機状態
+      // 【ライブ開始前の動作】視聴チャンネル1の開始10分前〜本番ライブ開始までの待機画面
       if (activeChannel === 1 && slot.type === 'wait') {
         standbyOverlay.classList.remove('hidden');
-        const remain = Math.max(0, Math.ceil(slot.endSec - nowSec));
+        const targetStart = slot.scheduledStartSec || slot.endSec;
+        const remain = Math.max(0, Math.ceil(targetStart - nowSec));
         const m = String(Math.floor(remain / 60)).padStart(2, '0');
         const s = String(remain % 60).padStart(2, '0');
         countdownEl.textContent = `${m}:${s}`;
         lagEl.textContent = '0.0';
 
-        if (playerReady && ytPlayer) {
-          try { ytPlayer.pauseVideo(); } catch (_) {}
+        // 通常動画が流れていたら完全に停止する
+        if (playerReady && ytPlayer && currentPlayingId !== null) {
+          try { ytPlayer.stopVideo(); } catch (_) {}
+          currentPlayingId = null;
+          currentPlayingType = null;
         }
-        currentPlayingId = null;
+
+        // 待機中は10秒おきにライブ開始を自動チェックし、始まった瞬間にライブ再生へ切り替える
+        if (Date.now() - lastStandbyPollMs > 10000) {
+          lastStandbyPollMs = Date.now();
+          checkLiveStatusOnly();
+        }
         return;
       }
 
@@ -811,15 +888,25 @@
 
       const targetOffset = Math.max(0, nowSec - slot.startSec);
 
-      // 動画またはライブ枠の切り替え
-      if (forceLoad || currentPlayingId !== slot.id) {
+      // 動画またはライブ枠への切り替え
+      if (forceLoad || currentPlayingId !== slot.id || currentPlayingType !== slot.type) {
         currentPlayingId = slot.id;
+        currentPlayingType = slot.type;
         userPaused = false;
-        ytPlayer.loadVideoById({
-          videoId: slot.id,
-          startSeconds: slot.type === 'live' ? undefined : Math.floor(targetOffset),
-          suggestedQuality: selectedQuality
-        });
+        lastLoadOrSeekMs = Date.now();
+
+        if (slot.type === 'live') {
+          // ライブ配信は startSeconds を指定せずに読み込み、YouTubeの最新ライブエッジから再生する
+          liveEdgeWallOriginSec = null;
+          ytPlayer.loadVideoById(slot.id);
+        } else {
+          ytPlayer.loadVideoById({
+            videoId: slot.id,
+            startSeconds: Math.floor(targetOffset),
+            suggestedQuality: selectedQuality
+          });
+        }
+
         disableCaptions();
         if (!isMuted) {
           try {
@@ -830,35 +917,88 @@
         return;
       }
 
-      // 遅延秒数の計測と自動追いつき
+      const state = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+
+      // 読み込み直後やバッファリング中は強制シークを行わない（無限バッファリング防止）
+      if (state === YT.PlayerState.BUFFERING || state === YT.PlayerState.UNSTARTED) {
+        return;
+      }
+
       const playerTime = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
       const realDuration = typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0;
 
-      let idealTime = targetOffset;
-      if (slot.type === 'live' && realDuration > 0) {
-        idealTime = realDuration;
+      // 【ライブが行われているときの動作】遅延計測＆倍速・30秒スキップ追いつき制御
+      if (slot.type === 'live') {
+        if (playerTime > 0) {
+          if (liveEdgeWallOriginSec === null) {
+            liveEdgeWallOriginSec = nowSec - playerTime;
+          } else {
+            const currentExpected = nowSec - liveEdgeWallOriginSec;
+            // プレイヤー位置が基準より先に進んだ場合は最新位置を新しいライブエッジとして更新
+            if (playerTime > currentExpected) {
+              liveEdgeWallOriginSec = nowSec - playerTime;
+            }
+            // DVRバッファ終端(realDuration)が基準より大きく進んでいる場合も補正
+            if (realDuration > 0 && realDuration - currentExpected > 12) {
+              const calibratedEdge = Math.max(playerTime, realDuration - 2);
+              liveEdgeWallOriginSec = nowSec - calibratedEdge;
+            }
+          }
+        }
+
+        const expectedLiveEdge = liveEdgeWallOriginSec !== null ? (nowSec - liveEdgeWallOriginSec) : playerTime;
+        const lag = Math.max(0, expectedLiveEdge - playerTime);
+        lagEl.textContent = lag.toFixed(1);
+
+        if (userPaused) return;
+
+        if (state !== YT.PlayerState.PLAYING) {
+          ytPlayer.playVideo();
+        }
+
+        // 30秒以上遅れていたら最新ライブ位置まで即スキップ
+        if (lag >= 30 && Date.now() - lastLoadOrSeekMs > 4000) {
+          lastLoadOrSeekMs = Date.now();
+          const seekTarget = realDuration > expectedLiveEdge ? Math.max(expectedLiveEdge, realDuration - 2) : expectedLiveEdge;
+          ytPlayer.seekTo(seekTarget, true);
+          ytPlayer.setPlaybackRate(1.0);
+        } else if (lag > 2.0) {
+          // 遅れていたら倍速再生でライブ位置まで戻す
+          if (ytPlayer.getPlaybackRate() !== 1.5) {
+            ytPlayer.setPlaybackRate(1.5);
+          }
+        } else if (lag <= 0.8) {
+          // ライブ位置に追いついたら等倍に戻す
+          if (ytPlayer.getPlaybackRate() !== 1.0) {
+            ytPlayer.setPlaybackRate(1.0);
+          }
+        }
+        return;
       }
 
-      const lag = Math.max(0, idealTime - playerTime);
+      // 【通常動画の同期・追いつき制御】
+      const lag = Math.max(0, targetOffset - playerTime);
       lagEl.textContent = lag.toFixed(1);
 
-      // ユーザーが手動で一時停止している間は強制シークしない
       if (userPaused) return;
 
-      const state = ytPlayer.getPlayerState();
-      if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
+      if (state !== YT.PlayerState.PLAYING) {
         ytPlayer.playVideo();
       }
 
-      if (lag >= 30) {
-        ytPlayer.seekTo(idealTime, true);
+      if (lag >= 30 && Date.now() - lastLoadOrSeekMs > 4000) {
+        lastLoadOrSeekMs = Date.now();
+        ytPlayer.seekTo(targetOffset, true);
         ytPlayer.setPlaybackRate(1.0);
       } else if (lag > 2.5) {
-        ytPlayer.setPlaybackRate(1.5);
-      } else if ( idealTime - playerTime < -4 && slot.type === 'video') {
-        ytPlayer.seekTo(idealTime, true);
+        if (ytPlayer.getPlaybackRate() !== 1.5) {
+          ytPlayer.setPlaybackRate(1.5);
+        }
+      } else if (targetOffset - playerTime < -4 && Date.now() - lastLoadOrSeekMs > 4000) {
+        lastLoadOrSeekMs = Date.now();
+        ytPlayer.seekTo(targetOffset, true);
         ytPlayer.setPlaybackRate(1.0);
-      } else {
+      } else if (lag <= 0.8) {
         if (ytPlayer.getPlaybackRate() !== 1.0) {
           ytPlayer.setPlaybackRate(1.0);
         }
@@ -993,7 +1133,7 @@
         .replace(/"/g, '&quot;');
     }
 
-    // 8. バックグラウンドで @takaneko_ch の新規動画＆ライブ枠を自動検知
+    // 8. @takaneko_ch のライブ配信枠（予約枠・配信中）および新規動画の高精度検知
     function parseDurationText(text) {
       if (!text) return 0;
       const parts = text.trim().split(':').map(Number);
@@ -1003,37 +1143,81 @@
       return parts[0] || 0;
     }
 
-    async function fetchTextWithFallback(targetUrl) {
-      const proxies = [
-        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-      ];
-      for (const buildUrl of proxies) {
+    // 複数プロキシを並列実行して最速のレスポンスを取得（キャッシュ回避付き）
+    async function fetchTextFast(targetUrl) {
+      const sep = targetUrl.includes('?') ? '&' : '?';
+      const bustUrl = `${targetUrl}${sep}_cb=${Date.now()}`;
+
+      const fetchVia = async (proxyUrl, isJsonWrapped = false) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 6500);
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 6000);
-          const res = await fetch(buildUrl(targetUrl), { signal: controller.signal });
+          const res = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
           clearTimeout(timer);
-          if (res.ok) {
-            const text = await res.text();
-            if (text && text.length > 500) return text;
-          }
-        } catch (_) {}
+          if (!res.ok) throw new Error('status ' + res.status);
+          const text = isJsonWrapped ? (await res.json()).contents : await res.text();
+          if (!text || text.length < 500) throw new Error('empty');
+          return text;
+        } catch (err) {
+          clearTimeout(timer);
+          throw err;
+        }
+      };
+
+      try {
+        return await Promise.any([
+          fetchVia(`https://corsproxy.io/?url=${encodeURIComponent(bustUrl)}`, false),
+          fetchVia(`https://api.allorigins.win/get?url=${encodeURIComponent(bustUrl)}`, true),
+          fetchVia(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(bustUrl)}`, false),
+          fetchVia(`https://api.allorigins.win/raw?url=${encodeURIComponent(bustUrl)}`, false)
+        ]);
+      } catch (_) {
+        return null;
       }
-      return null;
     }
 
-    function extractYtInitialData(html) {
+    // 巨大HTMLから波括弧の対応を正確に辿ってJSONオブジェクトを抽出
+    function extractJsonVariable(html, varName) {
       if (!html) return null;
-      const patterns = [
-        /var ytInitialData\s*=\s*(\{.+?\});<\/script>/s,
-        /window\["ytInitialData"\]\s*=\s*(\{.+?\});/s
+      const markers = [
+        `var ${varName} = `,
+        `window["${varName}"] = `,
+        `${varName} = `
       ];
-      for (const regex of patterns) {
-        const m = html.match(regex);
-        if (m && m[1]) {
-          try { return JSON.parse(m[1]); } catch (_) {}
+      for (const marker of markers) {
+        const idx = html.indexOf(marker);
+        if (idx === -1) continue;
+        const start = html.indexOf('{', idx + marker.length);
+        if (start === -1) continue;
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        for (let i = start; i < html.length; i++) {
+          const ch = html[i];
+          if (inString) {
+            if (escaped) {
+              escaped = false;
+            } else if (ch === '\\') {
+              escaped = true;
+            } else if (ch === '"') {
+              inString = false;
+            }
+          } else {
+            if (ch === '"') {
+              inString = true;
+            } else if (ch === '{') {
+              depth++;
+            } else if (ch === '}') {
+              depth--;
+              if (depth === 0) {
+                try {
+                  return JSON.parse(html.slice(start, i + 1));
+                } catch (_) {
+                  break;
+                }
+              }
+            }
+          }
         }
       }
       return null;
@@ -1041,8 +1225,8 @@
 
     function collectVideoRenderers(obj, results = []) {
       if (!obj || typeof obj !== 'object') return results;
-      if (obj.videoRenderer && obj.videoRenderer.videoId) {
-        results.push(obj.videoRenderer);
+      if ((obj.videoRenderer && obj.videoRenderer.videoId) || (obj.gridVideoRenderer && obj.gridVideoRenderer.videoId)) {
+        results.push(obj.videoRenderer || obj.gridVideoRenderer);
         return results;
       }
       for (const key of Object.keys(obj)) {
@@ -1051,111 +1235,268 @@
       return results;
     }
 
-    async function refreshChannelVideosAndLiveStatus() {
-      // URLパラメータでのライブ枠テスト指定にも対応 (?live=VIDEO_ID&start=UNIX_SEC)
-      const params = new URLSearchParams(location.search);
-      if (params.get('live')) {
-        const startSec = params.get('start')
-          ? Number(params.get('start'))
-          : Math.floor(Date.now() / 1000) - 30;
-        liveStreamInfo = {
-          videoId: params.get('live'),
-          title: params.get('title') || 'たかねこちゃんねる ライブ',
-          startTimeSec: startSec,
-          endTimeSec: startSec + 7200,
-          isLiveNow: Math.floor(Date.now() / 1000) >= startSec
-        };
+    // /live または watch?v= のHTMLからライブ/予約枠の詳細を抽出
+    function parseWatchOrLiveHtml(html) {
+      if (!html) return null;
+      const playerResp = extractJsonVariable(html, 'ytInitialPlayerResponse');
+      const vd = playerResp?.videoDetails || {};
+      const mf = playerResp?.microformat?.playerMicroformatRenderer || {};
+      const lbd = mf?.liveBroadcastDetails || null;
+      const slate = playerResp?.playabilityStatus?.liveStreamability?.liveStreamabilityRenderer?.offlineSlate?.liveStreamOfflineSlateRenderer || null;
+
+      const canonicalId = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})"/)?.[1];
+      const videoId = vd.videoId || canonicalId || null;
+      if (!videoId) return null;
+
+      const hasEndTimestamp = Boolean(lbd?.endTimestamp) || /"endTimestamp"\s*:\s*"[^"]+"/.test(html);
+      const isLiveNow = Boolean(
+        (lbd && lbd.isLiveNow === true) ||
+        /"isLiveNow"\s*:\s*true/.test(html) ||
+        (vd.isLive === true && !vd.isUpcoming && !slate && !hasEndTimestamp)
+      );
+      const isUpcoming = Boolean(
+        !isLiveNow && !hasEndTimestamp && (
+          vd.isUpcoming === true ||
+          Boolean(slate) ||
+          /"isUpcoming"\s*:\s*true/.test(html) ||
+          /"scheduledStartTime"\s*:\s*"\d+"/.test(html) ||
+          (lbd && lbd.isLiveNow === false)
+        )
+      );
+
+      if (!isLiveNow && !isUpcoming) return null;
+
+      let startTimeSec = null;
+      const slateStart = slate?.scheduledStartTime || (html.match(/"scheduledStartTime"\s*:\s*"(\d+)"/)?.[1]);
+      const isoStart = lbd?.startTimestamp || (html.match(/"startTimestamp"\s*:\s*"([^"]+)"/)?.[1]);
+
+      if (slateStart) {
+        startTimeSec = Number(slateStart);
+      } else if (isoStart) {
+        const parsed = Date.parse(isoStart);
+        if (!isNaN(parsed)) startTimeSec = Math.floor(parsed / 1000);
       }
 
-      // 1) @takaneko_ch/videos から通常動画（ライブアーカイブ・たかねこPodcastを除く）を取得・マージ
-      const videosHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/videos?hl=ja`);
-      const videosData = extractYtInitialData(videosHtml);
-      if (videosData) {
-        const renderers = collectVideoRenderers(videosData);
-        const existingIds = new Set(videoCatalog.map(v => v.id));
-        let added = false;
-
-        for (const vr of renderers) {
-          const vid = vr.videoId;
-          if (!vid || existingIds.has(vid)) continue;
-
-          const badgesStr = JSON.stringify(vr.badges || []) + JSON.stringify(vr.thumbnailOverlays || []);
-          const isLiveOrUpcoming = badgesStr.includes('LIVE') || Boolean(vr.upcomingEventData);
-          if (isLiveOrUpcoming) continue;
-
-          // 配信アーカイブ（「○日前に配信済み」等）を除外
-          const publishedText = vr.publishedTimeText?.simpleText || '';
-          if (publishedText.includes('配信')) continue;
-
-          const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
-          const lenText = vr.lengthText?.simpleText ||
-                          vr.thumbnailOverlays?.find(o => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
-          const duration = parseDurationText(lenText);
-
-          if (title && duration > 0 && !isExcludedVideo(title, duration)) {
-            existingIds.add(vid);
-            videoCatalog.push({
-              id: vid,
-              title,
-              duration,
-              thumb: `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`
-            });
-            added = true;
-          }
-        }
-
-        if (added) {
-          renderEpgGrid();
-        }
+      if (!startTimeSec) {
+        startTimeSec = Math.floor(Date.now() / 1000) - (isLiveNow ? 60 : -600);
       }
 
-      // 2) @takaneko_ch/streams から現在予定されているライブ枠・配信中のライブ枠を検知
-      const streamsHtml = await fetchTextWithFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
-      const streamsData = extractYtInitialData(streamsHtml);
-      if (streamsData) {
-        const streamRenderers = collectVideoRenderers(streamsData);
-        let foundActiveOrUpcoming = false;
+      const title = vd.title ||
+        mf.title?.simpleText ||
+        (html.match(/<meta name="title" content="([^"]+)">/)?.[1]) ||
+        'たかねこちゃんねる ライブ';
 
-        for (const sr of streamRenderers) {
-          const vid = sr.videoId;
-          const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || 'ライブ';
-          const badgesStr = JSON.stringify(sr.badges || []) + JSON.stringify(sr.thumbnailOverlays || []);
-          const isLiveBadge = badgesStr.includes('"LIVE"') || badgesStr.includes('ライブ配信中');
+      return {
+        videoId,
+        title,
+        startTimeSec,
+        isLiveNow,
+        isUpcoming
+      };
+    }
 
-          if (isLiveBadge) {
-            const startSec = liveStreamInfo.videoId === vid && liveStreamInfo.startTimeSec
-              ? liveStreamInfo.startTimeSec
-              : Math.floor(Date.now() / 1000) - 120;
-            liveStreamInfo = {
-              videoId: vid,
-              title,
-              startTimeSec: startSec,
-              endTimeSec: startSec + 7200,
-              isLiveNow: true
-            };
-            foundActiveOrUpcoming = true;
-            break;
-          } else if (sr.upcomingEventData && sr.upcomingEventData.startTime) {
-            const startSec = Number(sr.upcomingEventData.startTime);
-            liveStreamInfo = {
-              videoId: vid,
-              title,
-              startTimeSec: startSec,
-              endTimeSec: startSec + 7200,
-              isLiveNow: false
-            };
-            foundActiveOrUpcoming = true;
-            break;
-          }
-        }
+    function applyDetectedLiveInfo(detected) {
+      const prevId = liveStreamInfo.videoId;
+      const prevLiveNow = liveStreamInfo.isLiveNow;
+      const prevUpcoming = liveStreamInfo.isUpcoming;
+      const prevStart = liveStreamInfo.startTimeSec;
 
-        // URLパラメータ指定がなく、ライブが終了していた場合はライブ枠を解除
-        if (!foundActiveOrUpcoming && !params.get('live') && liveStreamInfo.videoId) {
+      if (!detected) {
+        if (prevId) {
           clearLiveStreamState();
-        } else if (foundActiveOrUpcoming) {
-          renderEpgGrid();
-          syncPlayback(false);
         }
+        return;
+      }
+
+      liveStreamInfo = {
+        videoId: detected.videoId,
+        title: detected.title || 'たかねこちゃんねる ライブ',
+        startTimeSec: detected.startTimeSec,
+        isLiveNow: Boolean(detected.isLiveNow),
+        isUpcoming: Boolean(detected.isUpcoming)
+      };
+
+      const changed =
+        prevId !== liveStreamInfo.videoId ||
+        prevLiveNow !== liveStreamInfo.isLiveNow ||
+        prevUpcoming !== liveStreamInfo.isUpcoming ||
+        prevStart !== liveStreamInfo.startTimeSec;
+
+      if (changed) {
+        renderEpgGrid();
+        syncPlayback(prevLiveNow !== liveStreamInfo.isLiveNow || prevId !== liveStreamInfo.videoId);
+      }
+    }
+
+    // ライブ配信状態のみを高速チェック（待機中や定期ポーリング用）
+    async function checkLiveStatusOnly() {
+      if (isCheckingLive) return;
+      isCheckingLive = true;
+
+      try {
+        // URLパラメータでのテスト指定 (?live=VIDEO_ID&start=UNIX_SEC&status=wait|live)
+        const params = new URLSearchParams(location.search);
+        if (params.get('live')) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const startSec = params.get('start') ? Number(params.get('start')) : nowSec - 30;
+          const forcedStatus = params.get('status');
+          const isLiveNow = forcedStatus === 'live' ? true : (forcedStatus === 'wait' ? false : nowSec >= startSec);
+          applyDetectedLiveInfo({
+            videoId: params.get('live'),
+            title: params.get('title') || 'たかねこちゃんねる ライブ',
+            startTimeSec: startSec,
+            isLiveNow: isLiveNow,
+            isUpcoming: !isLiveNow
+          });
+          isCheckingLive = false;
+          return;
+        }
+
+        // 1) @takaneko_ch/live と @takaneko_ch/streams を並列取得
+        const [liveHtml, streamsHtml] = await Promise.all([
+          fetchTextFast(`https://www.youtube.com/${CHANNEL_HANDLE}/live?hl=ja`),
+          fetchTextFast(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`)
+        ]);
+
+        // A. まず /live ページの ytInitialPlayerResponse から判定
+        const directLive = parseWatchOrLiveHtml(liveHtml);
+        if (directLive && directLive.isLiveNow) {
+          applyDetectedLiveInfo(directLive);
+          isCheckingLive = false;
+          return;
+        }
+
+        // B. /streams タブの一覧から「現在ライブ中」と「配信予定(予約枠)」を探索
+        let activeCandidate = null;
+        const upcomingCandidates = [];
+
+        const streamsData = extractJsonVariable(streamsHtml, 'ytInitialData') || extractJsonVariable(liveHtml, 'ytInitialData');
+        if (streamsData) {
+          const streamRenderers = collectVideoRenderers(streamsData);
+          const nowSec = Math.floor(Date.now() / 1000);
+
+          for (const sr of streamRenderers) {
+            const vid = sr.videoId;
+            if (!vid) continue;
+            const title = sr.title?.runs?.map(r => r.text).join('') || sr.title?.simpleText || 'たかねこちゃんねる ライブ';
+            const badgesStr = JSON.stringify(sr.badges || []) + JSON.stringify(sr.thumbnailOverlays || []);
+            const viewStr = JSON.stringify(sr.viewCountText || {});
+
+            const hasLiveBadge =
+              badgesStr.includes('BADGE_STYLE_TYPE_LIVE_NOW') ||
+              badgesStr.includes('"style":"LIVE"') ||
+              viewStr.includes('視聴中') ||
+              viewStr.includes('watching');
+
+            if (hasLiveBadge && !sr.upcomingEventData) {
+              activeCandidate = {
+                videoId: vid,
+                title,
+                startTimeSec: (liveStreamInfo.videoId === vid && liveStreamInfo.startTimeSec) ? liveStreamInfo.startTimeSec : nowSec - 60,
+                isLiveNow: true,
+                isUpcoming: false
+              };
+              break;
+            }
+
+            if (sr.upcomingEventData && sr.upcomingEventData.startTime) {
+              const startSec = Number(sr.upcomingEventData.startTime);
+              // 古すぎる放置枠（開始予定から6時間以上経過）は除外
+              if (startSec > nowSec - 21600) {
+                upcomingCandidates.push({
+                  videoId: vid,
+                  title,
+                  startTimeSec: startSec,
+                  isLiveNow: false,
+                  isUpcoming: true
+                });
+              }
+            }
+          }
+        }
+
+        // 現在ライブ中の枠が見つかった場合、watchページから正確な開始時刻も取得して反映
+        if (activeCandidate) {
+          const watchHtml = await fetchTextFast(`https://www.youtube.com/watch?v=${activeCandidate.videoId}&hl=ja`);
+          const detailed = parseWatchOrLiveHtml(watchHtml);
+          applyDetectedLiveInfo(detailed || activeCandidate);
+          isCheckingLive = false;
+          return;
+        }
+
+        // /live で予約枠が見つかった場合
+        if (directLive && directLive.isUpcoming) {
+          applyDetectedLiveInfo(directLive);
+          isCheckingLive = false;
+          return;
+        }
+
+        // /streams で予約枠が見つかった場合（最も開始時刻が近い枠を選択）
+        if (upcomingCandidates.length > 0) {
+          upcomingCandidates.sort((a, b) => a.startTimeSec - b.startTimeSec);
+          const nearest = upcomingCandidates[0];
+          // 開始10分前以内に入っている場合はwatchページで実際に始まったかどうかも最終確認
+          const nowSec = Math.floor(Date.now() / 1000);
+          if (nowSec >= nearest.startTimeSec - 600) {
+            const watchHtml = await fetchTextFast(`https://www.youtube.com/watch?v=${nearest.videoId}&hl=ja`);
+            const detailed = parseWatchOrLiveHtml(watchHtml);
+            applyDetectedLiveInfo(detailed || nearest);
+          } else {
+            applyDetectedLiveInfo(nearest);
+          }
+          isCheckingLive = false;
+          return;
+        }
+
+        // ライブ中も予約枠も存在しない場合（配信終了後）
+        if (liveHtml || streamsHtml) {
+          applyDetectedLiveInfo(null);
+        }
+      } catch (_) {}
+
+      isCheckingLive = false;
+    }
+
+    // 通常動画カタログの更新（ライブアーカイブ・Podcastを除く新着動画の自動追加）
+    async function refreshChannelVideos() {
+      const videosHtml = await fetchTextFast(`https://www.youtube.com/${CHANNEL_HANDLE}/videos?hl=ja`);
+      const videosData = extractJsonVariable(videosHtml, 'ytInitialData');
+      if (!videosData) return;
+
+      const renderers = collectVideoRenderers(videosData);
+      const existingIds = new Set(videoCatalog.map(v => v.id));
+      let added = false;
+
+      for (const vr of renderers) {
+        const vid = vr.videoId;
+        if (!vid || existingIds.has(vid)) continue;
+
+        const badgesStr = JSON.stringify(vr.badges || []) + JSON.stringify(vr.thumbnailOverlays || []);
+        const isLiveOrUpcoming = badgesStr.includes('"LIVE"') || badgesStr.includes('BADGE_STYLE_TYPE_LIVE_NOW') || Boolean(vr.upcomingEventData);
+        if (isLiveOrUpcoming) continue;
+
+        const publishedText = vr.publishedTimeText?.simpleText || '';
+        if (publishedText.includes('配信')) continue;
+
+        const title = vr.title?.runs?.map(r => r.text).join('') || vr.title?.simpleText || '';
+        const lenText = vr.lengthText?.simpleText ||
+                        vr.thumbnailOverlays?.find(o => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
+        const duration = parseDurationText(lenText);
+
+        if (title && duration > 0 && !isExcludedVideo(title, duration)) {
+          existingIds.add(vid);
+          videoCatalog.push({
+            id: vid,
+            title,
+            duration,
+            thumb: `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`
+          });
+          added = true;
+        }
+      }
+
+      if (added) {
+        renderEpgGrid();
       }
     }
 
@@ -1175,7 +1516,9 @@
       syncPlayback(false);
       scrollToCurrentTime();
 
-      refreshChannelVideosAndLiveStatus();
+      // 最優先でライブ枠・予約枠をチェックし、並行して動画一覧も更新
+      checkLiveStatusOnly();
+      refreshChannelVideos();
 
       setInterval(() => {
         tickClock();
@@ -1187,9 +1530,15 @@
         renderEpgGrid();
       }, 60000);
 
+      // 30秒ごとにライブ枠（枠立て・開始・終了）を定期チェック
       setInterval(() => {
-        refreshChannelVideosAndLiveStatus();
-      }, 120000);
+        checkLiveStatusOnly();
+      }, 30000);
+
+      // 5分ごとに新着動画をチェック
+      setInterval(() => {
+        refreshChannelVideos();
+      }, 300000);
     });
   </script>
 </body>
