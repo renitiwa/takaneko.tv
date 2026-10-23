@@ -9,23 +9,30 @@
     * {
       box-sizing: border-box;
       user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     body {
-      background-color: #0a0a0c;
-      color: #f4f4f6;
+      background-color: #09090b;
+      color: #f4f4f5;
       font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
       margin: 0;
       padding: 0;
       overflow-x: hidden;
     }
 
-    /* YouTube UI非表示コンテナ */
+    /* YouTubeネイティブUI完全非表示用ビューポート */
     .video-viewport {
       position: relative;
       width: 100%;
       aspect-ratio: 16 / 9;
       background: #000;
       overflow: hidden;
+    }
+    .video-viewport:fullscreen,
+    .video-viewport:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      aspect-ratio: auto;
     }
     .video-crop-wrapper {
       position: absolute;
@@ -42,14 +49,34 @@
       pointer-events: none;
     }
 
-    /* テレビ番組表 (EPG / ラテ欄) */
+    /* カスタムプレイヤーオーバーレイ */
+    .player-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.25) 28%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.22s ease;
+      pointer-events: none;
+    }
+    .player-overlay.visible {
+      opacity: 1;
+    }
+    .player-overlay.visible .player-controls-bar {
+      pointer-events: auto;
+    }
+
+    /* リアルなテレビ番組表 (EPG / ラテ欄) */
     .epg-scroll-container {
       position: relative;
       height: 540px;
       overflow-y: auto;
       overflow-x: hidden;
-      background: #121316;
-      border-top: 1px solid #26272b;
+      background: #101114;
+      border-top: 1px solid #27272a;
     }
     .epg-header-row {
       position: sticky;
@@ -57,8 +84,8 @@
       z-index: 30;
       display: grid;
       grid-template-columns: 52px 1fr 1fr;
-      background: #181a1f;
-      border-bottom: 2px solid #2e3138;
+      background: #18181b;
+      border-bottom: 2px solid #27272a;
     }
     .epg-body-grid {
       position: relative;
@@ -67,13 +94,13 @@
       height: 4320px; /* 24時間 × 180px (1分 = 3px) */
     }
     .epg-time-axis {
-      background: #15171c;
-      border-right: 1px solid #2a2d34;
+      background: #141417;
+      border-right: 1px solid #27272a;
       position: relative;
     }
     .epg-hour-cell {
       height: 180px;
-      border-bottom: 1px solid #2a2d34;
+      border-bottom: 1px solid #27272a;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -81,7 +108,7 @@
       padding-top: 6px;
       font-size: 13px;
       font-weight: 800;
-      color: #a0a5b1;
+      color: #a1a1aa;
     }
     .epg-hour-cell.morning { background: rgba(56, 189, 248, 0.04); }
     .epg-hour-cell.daytime { background: rgba(250, 204, 21, 0.04); }
@@ -90,29 +117,29 @@
 
     .epg-channel-col {
       position: relative;
-      border-right: 1px solid #2a2d34;
-      background-image: linear-gradient(to bottom, #22242a 1px, transparent 1px);
+      border-right: 1px solid #27272a;
+      background-image: linear-gradient(to bottom, #1f2025 1px, transparent 1px);
       background-size: 100% 180px;
     }
     .epg-program-item {
       position: absolute;
       left: 0;
       right: 0;
-      border-bottom: 1px solid #2a2d34;
+      border-bottom: 1px solid #27272a;
       padding: 4px 8px;
       overflow: hidden;
-      background: #14161a;
+      background: #131418;
       transition: background 0.15s;
       display: flex;
       gap: 8px;
       align-items: flex-start;
     }
     .epg-program-item:hover {
-      background: #1d2026;
+      background: #1c1e24;
       z-index: 10;
     }
     .epg-program-item.active-program {
-      background: #1d2432;
+      background: #1c2433;
       border-left: 3px solid #38bdf8;
     }
     .epg-program-item.live-slot {
@@ -124,7 +151,7 @@
       border-left: 3px solid #f59e0b;
     }
 
-    /* 現在時刻ライン */
+    /* 現在時刻の赤線 */
     .epg-now-line {
       position: absolute;
       left: 0;
@@ -150,60 +177,125 @@
       height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #0f1012;
+      background: #09090b;
     }
     ::-webkit-scrollbar-thumb {
-      background: #2e3138;
+      background: #27272a;
       border-radius: 3px;
     }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- ヘッダー -->
+  <!-- 上部ヘッダー -->
   <header class="h-14 px-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between sticky top-0 z-50">
-    <div class="flex items-center gap-5">
+    <div class="flex items-center gap-4">
       <a href="https://www.youtube.com/@takaneko_ch" target="_blank" rel="noopener noreferrer" class="text-lg font-black tracking-wider text-white hover:text-zinc-300 transition">
         TAKANEKO.TV
       </a>
       <nav class="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-        <button id="btn-ch1" onclick="switchChannel(1)" class="px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black">
+        <button id="btn-ch1" onclick="switchChannel(1)" class="px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-black">
           視聴チャンネル1
         </button>
-        <button id="btn-ch2" onclick="switchChannel(2)" class="px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white">
+        <button id="btn-ch2" onclick="switchChannel(2)" class="px-3.5 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white">
           視聴チャンネル2
+        </button>
+        <button id="btn-epg-toggle" onclick="toggleEpgSection()" class="px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-zinc-800 text-white hover:bg-zinc-700">
+          番組表
         </button>
       </nav>
     </div>
 
     <div class="flex items-center gap-3">
-      <button id="btn-audio" onclick="toggleAudio()" class="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white transition">
-        <svg id="icon-vol-on" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-        </svg>
-        <svg id="icon-vol-off" class="w-4 h-4 hidden text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-        </svg>
-      </button>
       <div id="clock-display" class="text-xs font-mono text-zinc-400 tabular-nums">00:00:00</div>
     </div>
   </header>
 
-  <!-- メインエリア -->
+  <!-- メインコンテンツ -->
   <main class="max-w-[1600px] w-full mx-auto p-4 flex-1 flex flex-col gap-4">
     <div id="stage-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
       
-      <!-- プレイヤー領域 -->
-      <div id="player-column" class="lg:col-span-9 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
-        <div class="video-viewport">
+      <!-- プレイヤーカラム（通常時は12列フル幅、CH1ライブ待機〜配信時のみ9列） -->
+      <div id="player-column" class="lg:col-span-12 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+        <div id="video-viewport" class="video-viewport">
           <div class="video-crop-wrapper">
             <div id="yt-player"></div>
           </div>
 
-          <!-- クリック透過防止＆音声有効化レイヤー -->
-          <div id="interaction-shield" onclick="handleShieldTap()" class="absolute inset-0 z-10 cursor-pointer"></div>
+          <!-- タップ・ホバー検知領域 -->
+          <div id="interaction-shield" class="absolute inset-0 z-10 cursor-pointer"></div>
 
-          <!-- 10分前待機画面（視聴チャンネル1のみ） -->
+          <!-- 動画をタップまたはカーソルを合わせた時に表示されるカスタムオーバーレイ -->
+          <div id="player-overlay" class="player-overlay">
+            <div class="player-controls-bar px-4 py-3 flex items-center justify-between gap-3">
+              <!-- 左側：再生/一時停止・音声・遅延秒数表示 -->
+              <div class="flex items-center gap-3">
+                <button
+                  id="btn-play-pause"
+                  onclick="togglePlayPause(event)"
+                  class="w-9 h-9 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-white transition"
+                >
+                  <!-- 一時停止アイコン -->
+                  <svg id="icon-pause" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+                  </svg>
+                  <!-- 再生アイコン -->
+                  <svg id="icon-play" class="w-4 h-4 hidden" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+
+                <button
+                  id="btn-audio"
+                  onclick="toggleAudio(event)"
+                  class="w-9 h-9 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-white transition"
+                >
+                  <svg id="icon-vol-on" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <svg id="icon-vol-off" class="w-4 h-4 hidden text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                </button>
+
+                <div class="px-2.5 py-1 rounded-md bg-zinc-900/90 border border-zinc-700/80 text-xs font-mono text-zinc-200 tabular-nums">
+                  <span id="delay-display">遅延 0.0秒</span>
+                </div>
+              </div>
+
+              <!-- 右側：画質選択・全画面表示 -->
+              <div class="flex items-center gap-2.5">
+                <select
+                  id="quality-select"
+                  onchange="changeVideoQuality(this.value, event)"
+                  onclick="event.stopPropagation()"
+                  class="h-9 px-2.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-bold text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="default">画質: 自動</option>
+                  <option value="hd1080">1080p</option>
+                  <option value="hd720">720p</option>
+                  <option value="large">480p</option>
+                  <option value="medium">360p</option>
+                  <option value="small">240p</option>
+                </select>
+
+                <button
+                  id="btn-fullscreen"
+                  onclick="toggleFullscreen(event)"
+                  class="w-9 h-9 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-white transition"
+                >
+                  <svg id="icon-fs-enter" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+                  </svg>
+                  <svg id="icon-fs-exit" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ライブ開始10分前待機画面（視聴チャンネル1のみ） -->
           <div id="standby-overlay" class="hidden absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
             <p class="text-lg md:text-2xl font-bold text-white tracking-wide">
               配信が開始されるまでお待ちください
@@ -212,12 +304,12 @@
           </div>
         </div>
 
-        <!-- 現在の番組情報バー -->
+        <!-- 現在再生している番組タイトル・時刻バー -->
         <div class="px-4 py-3 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3 min-w-0">
             <img
               id="current-thumb"
-              src="https://i.ytimg.com/vi/UsDZmpYOMq4/mqdefault.jpg"
+              src="https://i.ytimg.com/vi/Pt3oGNBTwjY/mqdefault.jpg"
               alt=""
               class="w-12 h-7 object-cover rounded bg-zinc-900 shrink-0"
             />
@@ -227,8 +319,8 @@
         </div>
       </div>
 
-      <!-- YouTubeチャット領域（視聴チャンネル1のみ） -->
-      <div id="chat-column" class="lg:col-span-3 w-full">
+      <!-- YouTubeライブチャット（視聴チャンネル1の10分前待機〜ライブ終了までのみ表示） -->
+      <div id="chat-column" class="hidden lg:col-span-3 w-full">
         <div class="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden h-[380px] lg:h-[520px]">
           <iframe
             id="yt-chat-frame"
@@ -242,7 +334,7 @@
     </div>
 
     <!-- 3日間テレビ番組表 (EPG) -->
-    <section class="flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+    <section id="epg-section" class="flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
       <div class="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
         <div id="epg-day-tabs" class="flex items-center gap-1"></div>
         <button onclick="scrollToCurrentTime()" class="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 transition">
@@ -272,21 +364,24 @@
     const EPOCH_BASE_SEC = Math.floor(new Date('2026-01-01T00:00:00+09:00').getTime() / 1000);
     const PX_PER_MINUTE = 3; // 1分 = 3px (1時間 = 180px, 24時間 = 4320px)
 
-    // 初期シードカタログ（たかねこちゃんねる実在動画リスト・即座に再生＆番組表描画が可能）
+    // @takaneko_ch のライブ配信・ライブアーカイブを除く全通常動画カタログ（実在ID・正確なタイトル・正確な秒数）
     const SEED_VIDEOS = [
-      { id: 'UsDZmpYOMq4', title: 'ほのぼのゲーかと思ったらとんでもないゲームだった件', duration: 920 },
-      { id: 'G4uU482Z59Q', title: 'たかねこPodcast #1 恋バナしようぜ', duration: 4620 },
-      { id: 'lKQKSVgymHA', title: '【リハビリ47日目】めっちゃカメレオン【隠れるゲーム】', duration: 5400 },
-      { id: 'vtW_jtJAELc', title: '【リハビリ46日目】めっちゃカメレオン【隠れるゲーム】', duration: 7639 },
-      { id: '6N0KrDewh5s', title: '【飲酒雑談】居酒屋で3万3千円溶かした後の深夜配信ｗ', duration: 5100 },
-      { id: '_EHcV-iH7TE', title: '【リハビリ43日目】めっちゃカメレオン【隠れるゲーム】', duration: 6300 },
-      { id: 'WGg5VHlGKWc', title: '【リハビリ33日目】めっちゃカメレオン【隠れるゲーム】', duration: 5800 },
-      { id: 'iFx3RStL_CQ', title: '【雑談配信】たかねこちゃんねる【のんびりまったり】', duration: 4800 },
-      { id: '203_cd6erMI', title: '【リハビリ17日目】めっちゃカメレオン【隠れるゲーム】', duration: 5200 },
-      { id: 'NYDGz5c75iQ', title: '【リハビリ7日目】めっちゃカメレオン【隠れるゲーム】', duration: 4900 },
-      { id: 'vv-o13YKrJc', title: '【切り抜き】おもてなしに爆笑するたかねこ', duration: 180 },
-      { id: 'Ejc45emW8KQ', title: '病弱トマトの大虐殺', duration: 60 },
-      { id: 'sUzEr3hmb2g', title: '【絶叫エンド】コメントくれる人への感謝の気持ち', duration: 60 }
+      { id: "Pt3oGNBTwjY", title: "【神ゲー】妹をわからせようとしたら逆にわからされた男の末路", duration: 1224 },
+      { id: "UsDZmpYOMq4", title: "癒やし系ゲームかと思ったら即死リズムゲーだった件", duration: 1076 },
+      { id: "Fg8F3SSV5BM", title: "たかねこPodcast #5　～カメレオンの振り返り～", duration: 1421 },
+      { id: "NSvKJ61Kghw", title: "たかねこPodcast #4 ～過去動画を見よう～", duration: 1892 },
+      { id: "mDYJiQEp5Cs", title: "たかねこPodcast #3.5 ～カメレオンでたびたび見かける変質者の正体を暴く！完結編～", duration: 1028 },
+      { id: "bPsATeE0X28", title: "たかねこPodcast #3 ～カメレオンでたびたび見かける変質者の正体を暴く！その2～", duration: 2401 },
+      { id: "W5ZfPdUveOc", title: "たかねこPodcast #2 ～カメレオンでたびたび見かける変質者の正体を暴く！～", duration: 2454 },
+      { id: "G4uU482Z59Q", title: "たかねこPodcast #1 ～恋愛トークをしよう～", duration: 4677 },
+      { id: "ovnGR7SjDmo", title: "たかねこPodcast #0 ～たかねこがリスナーからの質問に答える！～", duration: 5852 },
+      { id: "LxdlnSgJrPk", title: "Endless laughter / たかねこちゃんねるBGM", duration: 119 },
+      { id: "momFx-oGGJE", title: "【事故動画⁉️】酔っ払いゲーム実況者が酔っ払ったおっさんを帰宅させてみた🍺 【Drunken way to Home】", duration: 1116 },
+      { id: "VYNkZsYU3jU", title: "【絶叫＆爆笑】しょぼんのアクション3D【バグった】", duration: 858 },
+      { id: "Tqs77Nx2jZc", title: "【鬼畜クソゲー】しょぼんのアクション3D【今度は3D】", duration: 599 },
+      { id: "AZKyFeUl-DM", title: "【大敗北】しょぼんのアクションHD【ラスト】", duration: 655 },
+      { id: "XgRjc8CGP68", title: "【鬼畜クソゲー】しょぼんのアクションHD【このゲームヤバすぎ】", duration: 2372 },
+      { id: "iMmfbGWZ40M", title: "【鬼畜クソゲー】しょぼんのアクションHD【終わりの始まり】", duration: 2013 }
     ];
 
     let videoCatalog = SEED_VIDEOS.map(v => ({
@@ -296,22 +391,30 @@
 
     const brokenVideoIds = new Set();
 
+    // ライブ配信枠の状態管理
     let liveStreamInfo = {
       videoId: null,
       title: '',
       startTimeSec: null,
+      endTimeSec: null,
       isLiveNow: false
     };
 
     let activeChannel = 1;
-    let selectedDayOffset = 0; // 0: 今日, 1: 明日, 2: 明後日
+    let selectedDayOffset = 0;
+    let isEpgVisible = true;
+
     let ytPlayer = null;
     let playerReady = false;
     let currentPlayingId = null;
     let currentChatVideoId = null;
-    let userRequestedMute = false;
 
-    // 1. シード付き乱数（全デバイスで共通のランダム再生順序を生成）
+    let userRequestedMute = false;
+    let userPaused = false;
+    let selectedQuality = 'default';
+    let overlayHideTimer = null;
+
+    // 1. 全デバイス共通のシード付き乱数 (Mulberry32 + Fisher-Yates)
     function seededRandom(seed) {
       let t = (seed + 0x6D2B79F5) | 0;
       t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -320,8 +423,8 @@
     }
 
     function getActiveCatalog() {
-      const filtered = videoCatalog.filter(v => !brokenVideoIds.has(v.id));
-      return filtered.length > 0 ? filtered : videoCatalog;
+      const list = videoCatalog.filter(v => !brokenVideoIds.has(v.id));
+      return list.length > 0 ? list : videoCatalog;
     }
 
     function getDeterministicShuffle(list, cycleIndex, channelSalt) {
@@ -337,7 +440,7 @@
       return arr;
     }
 
-    // 2. 指定時間範囲の番組スケジュール算出（全端末共通）
+    // 2. 番組スケジュール算出（全端末で同じ時刻・同じ順番で同期）
     function getScheduleSlots(channelNum, rangeStartSec, rangeEndSec) {
       const catalog = getActiveCatalog();
       if (catalog.length === 0) return [];
@@ -374,11 +477,11 @@
         }
       }
 
-      // 視聴チャンネル1のみ、ライブ枠がある場合は10分前待機枠＋ライブ枠を番組表と再生スケジュールに反映
+      // 視聴チャンネル1のみ、ライブ配信枠が存在する場合は10分前待機枠＋ライブ枠を上書き
       if (channelNum === 1 && liveStreamInfo.videoId && liveStreamInfo.startTimeSec) {
         const waitStart = liveStreamInfo.startTimeSec - 600;
         const liveStart = liveStreamInfo.startTimeSec;
-        const liveEnd = liveStreamInfo.startTimeSec + 7200;
+        const liveEnd = liveStreamInfo.endTimeSec || (liveStreamInfo.startTimeSec + 7200);
 
         const merged = [];
         for (const s of slots) {
@@ -427,7 +530,7 @@
       return slots.find(s => nowSec >= s.startSec && nowSec < s.endSec) || slots[0] || null;
     }
 
-    // 3. YouTube IFrame API 読み込みとプレイヤー初期化
+    // 3. YouTube IFrame Player API 初期化（UI非表示・字幕強制オフ・デフォルト音声オン）
     function loadYouTubeApi() {
       if (window.YT && window.YT.Player) {
         initYouTubePlayer();
@@ -454,6 +557,7 @@
       currentPlayingId = startId;
 
       ytPlayer = new YT.Player('yt-player', {
+        host: 'https://www.youtube-nocookie.com',
         width: '100%',
         height: '100%',
         videoId: startId,
@@ -482,24 +586,25 @@
     function onPlayerReady(e) {
       playerReady = true;
       disableCaptions();
+      applySelectedQuality();
 
-      // デフォルトで音声をオンに設定して再生
       try {
         e.target.unMute();
         e.target.setVolume(100);
         e.target.playVideo();
       } catch (_) {}
 
-      // ブラウザの自動再生制限で万が一再生がブロックされた場合は、画面が真っ黒にならないよう一時ミュートで即再生を開始し、最初の操作で自動的に音声をオンに戻す
+      // 自動再生ポリシーによる停止を検知した場合は一時ミュートで再生を開始し、初回操作時に自動アンミュート
       setTimeout(() => {
         if (!ytPlayer || typeof ytPlayer.getPlayerState !== 'function') return;
         const st = ytPlayer.getPlayerState();
-        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
+        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING && !userPaused) {
           ytPlayer.mute();
           ytPlayer.playVideo();
         }
         updateAudioIcon();
-      }, 850);
+        updatePlayPauseIcon();
+      }, 800);
 
       syncPlayback(false);
     }
@@ -507,6 +612,11 @@
     function onPlayerStateChange(e) {
       disableCaptions();
       updateAudioIcon();
+      updatePlayPauseIcon();
+
+      if (e.data === YT.PlayerState.PLAYING) {
+        applySelectedQuality();
+      }
 
       const nowSec = Date.now() / 1000;
       const slot = getCurrentSlot(activeChannel, nowSec);
@@ -519,8 +629,18 @@
       }
 
       if (e.data === YT.PlayerState.PAUSED) {
-        ytPlayer.playVideo();
+        if (!userPaused) {
+          ytPlayer.playVideo();
+        }
       } else if (e.data === YT.PlayerState.ENDED) {
+        // ライブ配信枠が終了した場合はライブ情報をクリアして通常動画に戻し、チャットも非表示にする
+        if (slot && slot.type === 'live') {
+          liveStreamInfo.videoId = null;
+          liveStreamInfo.startTimeSec = null;
+          liveStreamInfo.endTimeSec = null;
+          liveStreamInfo.isLiveNow = false;
+          renderEpgGrid();
+        }
         currentPlayingId = null;
         syncPlayback(true);
       }
@@ -535,7 +655,6 @@
       }
     }
 
-    // 字幕を常に自動でオフにする
     function disableCaptions() {
       if (!ytPlayer || !playerReady) return;
       try {
@@ -550,7 +669,137 @@
       } catch (_) {}
     }
 
-    // 音声操作＆自動アンミュート復帰
+    // 4. カスタムオーバーレイ操作（再生/一時停止・画質変更・全画面・音声・ホバー/タップ表示）
+    function setupPlayerOverlayInteractions() {
+      const viewport = document.getElementById('video-viewport');
+      const shield = document.getElementById('interaction-shield');
+
+      const showOverlayTemporarily = () => {
+        const overlay = document.getElementById('player-overlay');
+        overlay.classList.add('visible');
+        if (overlayHideTimer) clearTimeout(overlayHideTimer);
+        overlayHideTimer = setTimeout(() => {
+          if (!userPaused) {
+            overlay.classList.remove('visible');
+          }
+        }, 3000);
+      };
+
+      viewport.addEventListener('mousemove', showOverlayTemporarily);
+      viewport.addEventListener('mouseenter', showOverlayTemporarily);
+      viewport.addEventListener('mouseleave', () => {
+        if (overlayHideTimer) clearTimeout(overlayHideTimer);
+        if (!userPaused) {
+          document.getElementById('player-overlay').classList.remove('visible');
+        }
+      });
+
+      shield.addEventListener('click', (e) => {
+        unlockAudioOnInteraction();
+        const overlay = document.getElementById('player-overlay');
+        if (!overlay.classList.contains('visible')) {
+          showOverlayTemporarily();
+        } else {
+          togglePlayPause(e);
+        }
+      });
+
+      document.addEventListener('fullscreenchange', updateFullscreenIcon);
+      document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+    }
+
+    function togglePlayPause(e) {
+      if (e) e.stopPropagation();
+      unlockAudioOnInteraction();
+      if (!ytPlayer || !playerReady) return;
+
+      const nowSec = Date.now() / 1000;
+      const slot = getCurrentSlot(activeChannel, nowSec);
+      if (activeChannel === 1 && slot && slot.type === 'wait') return;
+
+      const state = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+      if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+        userPaused = true;
+        ytPlayer.pauseVideo();
+        document.getElementById('player-overlay').classList.add('visible');
+      } else {
+        userPaused = false;
+        ytPlayer.playVideo();
+        syncPlayback(false);
+      }
+      updatePlayPauseIcon();
+    }
+
+    function updatePlayPauseIcon() {
+      const playIcon = document.getElementById('icon-play');
+      const pauseIcon = document.getElementById('icon-pause');
+      if (!ytPlayer || !playerReady || typeof ytPlayer.getPlayerState !== 'function') return;
+      const state = ytPlayer.getPlayerState();
+      const isPaused = userPaused || state === YT.PlayerState.PAUSED;
+      playIcon.classList.toggle('hidden', !isPaused);
+      pauseIcon.classList.toggle('hidden', isPaused);
+    }
+
+    function changeVideoQuality(quality, e) {
+      if (e) e.stopPropagation();
+      selectedQuality = quality;
+      applySelectedQuality(true);
+    }
+
+    function applySelectedQuality(forceReloadIfNeeded = false) {
+      if (!ytPlayer || !playerReady) return;
+      try {
+        if (typeof ytPlayer.setPlaybackQualityRange === 'function') {
+          if (selectedQuality === 'default') {
+            ytPlayer.setPlaybackQuality('default');
+          } else {
+            ytPlayer.setPlaybackQualityRange(selectedQuality, selectedQuality);
+            ytPlayer.setPlaybackQuality(selectedQuality);
+          }
+        } else if (typeof ytPlayer.setPlaybackQuality === 'function') {
+          ytPlayer.setPlaybackQuality(selectedQuality);
+        }
+
+        if (forceReloadIfNeeded && currentPlayingId && typeof ytPlayer.getCurrentTime === 'function') {
+          const curTime = ytPlayer.getCurrentTime() || 0;
+          ytPlayer.loadVideoById({
+            videoId: currentPlayingId,
+            startSeconds: curTime,
+            suggestedQuality: selectedQuality
+          });
+          if (userPaused) {
+            setTimeout(() => ytPlayer.pauseVideo(), 200);
+          }
+        }
+      } catch (_) {}
+    }
+
+    function toggleFullscreen(e) {
+      if (e) e.stopPropagation();
+      const viewport = document.getElementById('video-viewport');
+      const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+
+      if (!fsElement) {
+        if (viewport.requestFullscreen) {
+          viewport.requestFullscreen();
+        } else if (viewport.webkitRequestFullscreen) {
+          viewport.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    }
+
+    function updateFullscreenIcon() {
+      const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+      document.getElementById('icon-fs-enter').classList.toggle('hidden', !!fsElement);
+      document.getElementById('icon-fs-exit').classList.toggle('hidden', !fsElement);
+    }
+
     function unlockAudioOnInteraction() {
       if (!ytPlayer || !playerReady || userRequestedMute) return;
       try {
@@ -559,10 +808,6 @@
           ytPlayer.setVolume(100);
           updateAudioIcon();
         }
-        const st = ytPlayer.getPlayerState();
-        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
-          ytPlayer.playVideo();
-        }
       } catch (_) {}
     }
 
@@ -570,11 +815,8 @@
       window.addEventListener(evt, unlockAudioOnInteraction, { passive: true });
     });
 
-    function handleShieldTap() {
-      unlockAudioOnInteraction();
-    }
-
-    function toggleAudio() {
+    function toggleAudio(e) {
+      if (e) e.stopPropagation();
       if (!ytPlayer || !playerReady) return;
       try {
         if (ytPlayer.isMuted()) {
@@ -596,48 +838,68 @@
       document.getElementById('icon-vol-off').classList.toggle('hidden', !muted);
     }
 
-    // 4. チャンネル切替とYouTubeライブチャット表示制御
+    // 5. チャンネル切り替え・番組表表示/非表示・ライブチャット表示制御
     function switchChannel(ch) {
       if (activeChannel === ch) return;
       activeChannel = ch;
+      userPaused = false;
 
       const btn1 = document.getElementById('btn-ch1');
       const btn2 = document.getElementById('btn-ch2');
-      const chatCol = document.getElementById('chat-column');
-      const playerCol = document.getElementById('player-column');
 
       if (ch === 1) {
-        btn1.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
-        btn2.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
-        chatCol.classList.remove('hidden');
-        playerCol.className = 'lg:col-span-9 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
+        btn1.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
+        btn2.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
       } else {
-        btn2.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
-        btn1.className = 'px-4 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
-        chatCol.classList.add('hidden');
-        playerCol.className = 'lg:col-span-12 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
+        btn2.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-black';
+        btn1.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
       }
 
       currentPlayingId = null;
       syncPlayback(true);
     }
 
-    function updateYouTubeChat(videoId) {
+    function toggleEpgSection() {
+      isEpgVisible = !isEpgVisible;
+      const epgSection = document.getElementById('epg-section');
+      const btnEpg = document.getElementById('btn-epg-toggle');
+
+      epgSection.classList.toggle('hidden', !isEpgVisible);
+      if (isEpgVisible) {
+        btnEpg.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-zinc-800 text-white hover:bg-zinc-700';
+        scrollToCurrentTime();
+      } else {
+        btnEpg.className = 'px-3.5 py-1.5 rounded-md text-xs font-bold transition text-zinc-400 hover:text-white';
+      }
+    }
+
+    // 視聴チャンネル1で「ライブ10分前待機」〜「ライブ配信終了」の間のみライブチャットを表示
+    function updateChatVisibilityAndFrame(slot) {
+      const chatCol = document.getElementById('chat-column');
+      const playerCol = document.getElementById('player-column');
       const chatFrame = document.getElementById('yt-chat-frame');
-      if (activeChannel !== 1 || !videoId) {
+
+      const shouldShowChat = activeChannel === 1 && slot && (slot.type === 'wait' || slot.type === 'live') && !!slot.id;
+
+      if (shouldShowChat) {
+        chatCol.classList.remove('hidden');
+        playerCol.className = 'lg:col-span-9 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
+        if (currentChatVideoId !== slot.id) {
+          currentChatVideoId = slot.id;
+          const domain = location.hostname || 'localhost';
+          chatFrame.src = `https://www.youtube.com/live_chat?v=${encodeURIComponent(slot.id)}&embed_domain=${encodeURIComponent(domain)}&dark_theme=1`;
+        }
+      } else {
+        chatCol.classList.add('hidden');
+        playerCol.className = 'lg:col-span-12 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden';
         if (currentChatVideoId !== null) {
           chatFrame.src = 'about:blank';
           currentChatVideoId = null;
         }
-        return;
       }
-      if (currentChatVideoId === videoId) return;
-      currentChatVideoId = videoId;
-      const domain = location.hostname || 'localhost';
-      chatFrame.src = `https://www.youtube.com/live_chat?v=${encodeURIComponent(videoId)}&embed_domain=${encodeURIComponent(domain)}&dark_theme=1`;
     }
 
-    // 5. 再生同期・10分前待機・倍速追いつき＆30秒以上スキップ制御
+    // 6. 再生同期・10分前待機・遅延秒数表示・倍速追いつき＆30秒以上スキップ
     function formatHM(sec) {
       const d = new Date(sec * 1000);
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -653,22 +915,24 @@
       const titleEl = document.getElementById('current-title');
       const thumbEl = document.getElementById('current-thumb');
       const timeRangeEl = document.getElementById('current-time-range');
+      const delayDisplayEl = document.getElementById('delay-display');
 
-      // 現在の動画のタイトル・サムネイル・時刻を一致させて表示
+      // タイトル・サムネイル・時刻を一致させて表示
       titleEl.textContent = slot.title;
       thumbEl.src = slot.thumb;
       timeRangeEl.textContent = `${formatHM(slot.startSec)} - ${formatHM(slot.endSec)}`;
 
-      // 視聴チャンネル1のみYouTubeチャットを更新
-      updateYouTubeChat(slot.id);
+      // ライブチャットの表示・非表示制御
+      updateChatVisibilityAndFrame(slot);
 
-      // 視聴チャンネル1で配信開始10分前の場合
+      // 視聴チャンネル1の10分前待機表示
       if (activeChannel === 1 && slot.type === 'wait') {
         standbyOverlay.classList.remove('hidden');
         const remain = Math.max(0, Math.ceil(slot.endSec - nowSec));
         const m = String(Math.floor(remain / 60)).padStart(2, '0');
         const s = String(remain % 60).padStart(2, '0');
         countdownEl.textContent = `${m}:${s}`;
+        delayDisplayEl.textContent = '遅延 0.0秒';
 
         if (playerReady && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
           ytPlayer.pauseVideo();
@@ -682,18 +946,42 @@
 
       const targetOffset = Math.max(0, nowSec - slot.startSec);
 
-      // 動画の切り替え
+      // 番組切り替え時
       if (forceLoad || currentPlayingId !== slot.id) {
         currentPlayingId = slot.id;
+        userPaused = false;
         ytPlayer.loadVideoById({
           videoId: slot.id,
-          startSeconds: slot.type === 'live' ? undefined : Math.floor(targetOffset)
+          startSeconds: slot.type === 'live' ? undefined : Math.floor(targetOffset),
+          suggestedQuality: selectedQuality
         });
         disableCaptions();
+        applySelectedQuality();
         if (!userRequestedMute) {
           ytPlayer.unMute();
           ytPlayer.setVolume(100);
         }
+        updatePlayPauseIcon();
+        return;
+      }
+
+      // 理想再生位置と現在再生位置から遅延秒数を算出
+      const realDuration = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+      const playerTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : targetOffset;
+
+      let idealTime = targetOffset;
+      if (slot.type === 'live' && realDuration > 0) {
+        idealTime = Math.max(0, realDuration - 1);
+      } else if (slot.type === 'video' && realDuration > 0 && targetOffset >= realDuration - 0.5) {
+        idealTime = Math.min(targetOffset, Math.max(0, realDuration - 0.5));
+      }
+
+      const rawLag = Math.max(0, idealTime - playerTime);
+      delayDisplayEl.textContent = `遅延 ${rawLag.toFixed(1)}秒`;
+
+      // ユーザーが一時停止している間は強制同期を行わない
+      if (userPaused) {
+        updatePlayPauseIcon();
         return;
       }
 
@@ -702,39 +990,27 @@
 
       disableCaptions();
 
-      // 実際の再生時間の長さが取得できたらカタログのdurationも補正
-      const realDuration = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-      const playerTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : targetOffset;
+      const signedLag = idealTime - playerTime;
 
-      let idealTime = targetOffset;
-      if (slot.type === 'live' && realDuration > 0) {
-        idealTime = Math.max(0, realDuration - 1);
-      } else if (slot.type === 'video' && realDuration > 0 && targetOffset >= realDuration - 1) {
-        // 実際の動画尺が予定尺より短かった場合はループまたはシークして黒画面を防ぐ
-        idealTime = targetOffset % Math.max(10, Math.floor(realDuration - 1));
-      }
-
-      const lag = idealTime - playerTime;
-
-      // 30秒以上遅れていたらライブ位置へ即スキップ、それ未満の遅れは倍速(1.5x)で追いつく
-      if (lag >= 30) {
+      // 30秒以上遅れていたら即座に最新位置へスキップ、2.5秒〜30秒の遅れは1.5倍速で追いつく
+      if (signedLag >= 30) {
         ytPlayer.seekTo(idealTime, true);
         ytPlayer.setPlaybackRate(1.0);
-      } else if (lag > 2.5) {
+      } else if (signedLag > 2.5) {
         if (ytPlayer.getPlaybackRate() !== 1.5) {
           ytPlayer.setPlaybackRate(1.5);
         }
-      } else if (lag < -4 && slot.type === 'video') {
+      } else if (signedLag < -4 && slot.type === 'video') {
         ytPlayer.seekTo(idealTime, true);
         ytPlayer.setPlaybackRate(1.0);
-      } else if (lag <= 0.8) {
+      } else if (signedLag <= 0.8) {
         if (ytPlayer.getPlaybackRate() !== 1.0) {
           ytPlayer.setPlaybackRate(1.0);
         }
       }
     }
 
-    // 6. 3日間対応のテレビ番組表 (EPG) 描画
+    // 7. 3日間対応のテレビ番組表 (EPG) 描画
     function getDayStartUnixSec(dayOffset) {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
@@ -839,6 +1115,7 @@
     }
 
     function scrollToCurrentTime() {
+      if (!isEpgVisible) return;
       if (selectedDayOffset !== 0) {
         selectedDayOffset = 0;
         renderEpgDayTabs();
@@ -854,9 +1131,18 @@
       });
     }
 
-    // 7. バックグラウンドで実動画の正確なタイトルとライブ枠情報を非同期取得（初期描画・再生を一切ブロックしない）
-    async function syncExactVideoTitlesAndLiveStatus() {
-      // URLパラメータでのライブ枠指定 (?live=VIDEO_ID&start=UNIX_SEC)
+    // 8. バックグラウンドで新規の通常動画（ライブ・配信アーカイブを厳密に除外）とライブ配信枠をチェック
+    function parseDurationText(text) {
+      if (!text) return 0;
+      const parts = text.trim().split(':').map(Number);
+      if (parts.some(isNaN)) return 0;
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      return parts[0] || 0;
+    }
+
+    async function syncChannelVideosAndLiveStatus() {
+      // URLパラメータでのライブ枠テスト指定にも対応 (?live=VIDEO_ID&start=UNIX_SEC)
       const params = new URLSearchParams(location.search);
       if (params.get('live')) {
         liveStreamInfo.videoId = params.get('live');
@@ -864,64 +1150,105 @@
         liveStreamInfo.startTimeSec = params.get('start')
           ? Number(params.get('start'))
           : Math.floor(Date.now() / 1000) - 60;
+        liveStreamInfo.endTimeSec = liveStreamInfo.startTimeSec + 7200;
         liveStreamInfo.isLiveNow = Math.floor(Date.now() / 1000) >= liveStreamInfo.startTimeSec;
         renderEpgGrid();
         syncPlayback(false);
       }
 
-      // noembed APIで各動画のYouTube公式タイトルを正確に同期
-      let updatedAnyTitle = false;
-      await Promise.allSettled(
-        videoCatalog.map(async (item) => {
-          try {
-            const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${item.id}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data && data.title && data.title !== item.title) {
-                item.title = data.title;
-                updatedAnyTitle = true;
-              }
-            }
-          } catch (_) {}
-        })
-      );
-
-      if (updatedAnyTitle) {
-        renderEpgGrid();
-        syncPlayback(false);
-      }
-
-      // @takaneko_ch の最新動画・ライブ枠をバックグラウンドでチェック
+      // 1) @takaneko_ch/videos からライブ配信・配信アーカイブを除く純粋な通常動画のみを取得
       try {
-        const html = await fetchWithProxyFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
-        const data = extractYtInitialData(html);
-        if (data) {
-          const renderers = collectVideoRenderers(data);
+        const videosHtml = await fetchWithProxyFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/videos?hl=ja`);
+        const initialData = extractYtInitialData(videosHtml);
+        if (initialData) {
+          const renderers = collectVideoRenderers(initialData);
+          const existingIds = new Set(videoCatalog.map(v => v.id));
+          let addedNewVideo = false;
+
+          for (const vr of renderers) {
+            const vid = vr.videoId;
+            if (!vid || existingIds.has(vid)) continue;
+
+            const publishedText = vr.publishedTimeText?.simpleText || '';
+            const isStreamArchive = publishedText.includes('配信済み') || publishedText.toLowerCase().includes('streamed');
+            const isLiveOrUpcoming = !!vr.upcomingEventData ||
+              JSON.stringify(vr.badges || []).includes('LIVE') ||
+              JSON.stringify(vr.thumbnailOverlays || []).includes('LIVE');
+
+            // ライブ配信およびライブアーカイブは通常動画カタログに一切含めない
+            if (isStreamArchive || isLiveOrUpcoming) continue;
+
+            const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
+            const lenText = vr.lengthText?.simpleText ||
+              vr.thumbnailOverlays?.find(o => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText;
+            const durationSec = parseDurationText(lenText);
+
+            if (title && durationSec > 0) {
+              existingIds.add(vid);
+              videoCatalog.push({
+                id: vid,
+                title: title,
+                duration: durationSec,
+                thumb: `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`
+              });
+              addedNewVideo = true;
+            }
+          }
+
+          if (addedNewVideo) {
+            renderEpgGrid();
+            syncPlayback(false);
+          }
+        }
+      } catch (_) {}
+
+      // 2) @takaneko_ch/streams から現在予定されているライブ枠または配信中のライブ枠のみを検知（過去のライブアーカイブは無視）
+      try {
+        const streamsHtml = await fetchWithProxyFallback(`https://www.youtube.com/${CHANNEL_HANDLE}/streams?hl=ja`);
+        const streamsData = extractYtInitialData(streamsHtml);
+        if (streamsData) {
+          const renderers = collectVideoRenderers(streamsData);
+          let foundActiveOrUpcomingLive = false;
+
           for (const sr of renderers) {
             const vid = sr.videoId;
-            const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || '';
-            const isLiveBadge = JSON.stringify(sr.badges || []).includes('LIVE') ||
-                                JSON.stringify(sr.thumbnailOverlays || []).includes('LIVE');
-            if (isLiveBadge && vid) {
+            if (!vid) continue;
+            const title = sr.title?.runs?.[0]?.text || sr.title?.simpleText || 'たかねこちゃんねる ライブ';
+            const isLiveNowBadge = JSON.stringify(sr.badges || []).includes('LIVE') ||
+              JSON.stringify(sr.thumbnailOverlays || []).includes('"style":"LIVE"');
+
+            if (isLiveNowBadge) {
               liveStreamInfo.videoId = vid;
-              liveStreamInfo.title = title || 'たかねこちゃんねる ライブ';
+              liveStreamInfo.title = title;
               if (!liveStreamInfo.startTimeSec) {
                 liveStreamInfo.startTimeSec = Math.floor(Date.now() / 1000) - 180;
               }
+              liveStreamInfo.endTimeSec = liveStreamInfo.startTimeSec + 7200;
               liveStreamInfo.isLiveNow = true;
-              renderEpgGrid();
-              syncPlayback(false);
+              foundActiveOrUpcomingLive = true;
               break;
-            } else if (sr.upcomingEventData && sr.upcomingEventData.startTime && vid) {
+            } else if (sr.upcomingEventData && sr.upcomingEventData.startTime) {
               liveStreamInfo.videoId = vid;
-              liveStreamInfo.title = title || 'たかねこちゃんねる ライブ';
+              liveStreamInfo.title = title;
               liveStreamInfo.startTimeSec = Number(sr.upcomingEventData.startTime);
+              liveStreamInfo.endTimeSec = liveStreamInfo.startTimeSec + 7200;
               liveStreamInfo.isLiveNow = false;
-              renderEpgGrid();
-              syncPlayback(false);
+              foundActiveOrUpcomingLive = true;
               break;
             }
           }
+
+          if (!foundActiveOrUpcomingLive && !params.get('live')) {
+            if (liveStreamInfo.videoId !== null) {
+              liveStreamInfo.videoId = null;
+              liveStreamInfo.startTimeSec = null;
+              liveStreamInfo.endTimeSec = null;
+              liveStreamInfo.isLiveNow = false;
+            }
+          }
+
+          renderEpgGrid();
+          syncPlayback(false);
         }
       } catch (_) {}
     }
@@ -985,9 +1312,10 @@
       document.getElementById('clock-display').textContent = `${hh}:${mm}:${ss}`;
     }
 
-    // 8. 初期起動（通信待ちなしで即座に番組表描画と動画再生を開始）
+    // 9. 初期起動
     window.addEventListener('DOMContentLoaded', () => {
       tickClock();
+      setupPlayerOverlayInteractions();
       renderEpgDayTabs();
       renderEpgGrid();
       syncPlayback(false);
@@ -995,8 +1323,7 @@
 
       setTimeout(scrollToCurrentTime, 100);
 
-      // 非同期で公式タイトル補正とライブ枠チェックを実行
-      syncExactVideoTitlesAndLiveStatus();
+      syncChannelVideosAndLiveStatus();
 
       setInterval(() => {
         tickClock();
@@ -1009,15 +1336,9 @@
       }, 60000);
 
       setInterval(() => {
-        syncExactVideoTitlesAndLiveStatus();
+        syncChannelVideosAndLiveStatus();
       }, 180000);
     });
   </script>
 </body>
 </html>
-```
-
-### 修正したポイント
-1. **即座に動画と3日間番組表を表示**: 外部プロキシ通信の完了を待たずに、`@takaneko_ch` の実在動画データからページ読み込みと同時にプレイヤー再生と3日間の番組表（EPG）を描画します。また、`noembed` APIを併用して実際のYouTubeタイトル・サムネイル・映像が完全に一致するようにしています。
-2. **プレイヤーの確実な動作と自動音声オン**: `youtube-nocookie.com` による初期化ブロックを解消して標準のYouTube IFrame APIで確実に起動し、字幕の自動オフ（`cc_load_policy: 0` および `unloadModule`）と音声のデフォルトオンを適用しています。
-3. **視聴チャンネル1・2の仕様とシンプルなUI**: 余計なボタンや「○○中」といったテキストをすべて排除し、3日間のラテ欄形式の番組表と視聴チャンネル1専用のYouTubeチャットを備えたシンプルな構成にしています。
